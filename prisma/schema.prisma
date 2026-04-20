@@ -1,0 +1,48 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../node_modules/.prisma/client"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String
+  role          String    @default("user")
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  assets        Asset[]
+  sessions      Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Asset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  fileName    String
+  fileType    String
+  fileSize    Int
+  mimeType    String
+  category    String   @default("other")
+  tags        String   @default("")
+  url         String
+  thumbnail   String?
+  isPublic    Boolean  @default(true)
+  uploadedBy  String
+  user        User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
