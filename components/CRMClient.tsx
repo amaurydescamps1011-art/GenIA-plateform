@@ -2,6 +2,7 @@
 
 import { CSSProperties, useEffect, useState, useCallback } from "react";
 import ClientProfile from "./ClientProfile";
+import ProjectSheet from "./ProjectSheet";
 
 type Client = {
   id: string;
@@ -46,6 +47,8 @@ export default function CRMClient({
   const [newName, setNewName] = useState("");
   const [editForm, setEditForm] = useState<Partial<Client>>({});
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [projectClient, setProjectClient] = useState<Client | null>(null);
+  const [selectorClient, setSelectorClient] = useState<Client | null>(null);
 
   const showToast = useCallback((message: string) => {
     const id = Date.now();
@@ -316,7 +319,7 @@ export default function CRMClient({
                   <div
                     key={client.id}
                     style={cardStyle}
-                    onClick={() => openEdit(client)}
+                    onClick={() => setSelectorClient(client)}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p
@@ -372,10 +375,6 @@ export default function CRMClient({
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button
-                        style={{ fontSize: "0.7rem", padding: "2px 7px", borderRadius: "4px", border: "1px solid var(--accent)", background: "transparent", cursor: "pointer", color: "var(--accent)", fontWeight: 600 }}
-                        onClick={() => setProfileId(client.id)}
-                      >Fiche</button>
                       {colIdx > 0 && (
                         <button
                           style={{
@@ -419,8 +418,84 @@ export default function CRMClient({
         })}
       </div>
 
+      {/* Selector popup */}
+      {selectorClient && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 180,
+          }}
+          onClick={() => setSelectorClient(null)}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "14px",
+              padding: "1.5rem",
+              width: "320px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.75rem",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Client</p>
+              <h3 style={{ margin: "0.2rem 0 0 0", fontSize: "1.1rem", fontWeight: 700 }}>{selectorClient.name}</h3>
+            </div>
+            <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "0.25rem 0" }} />
+            <button
+              className="genia-btn"
+              style={{ width: "100%", fontSize: "0.9rem", padding: "0.65rem" }}
+              onClick={() => {
+                setProjectClient(selectorClient);
+                setSelectorClient(null);
+              }}
+            >
+              📋 Fiche Projet
+            </button>
+            <button
+              className="genia-btn-ghost"
+              style={{ width: "100%", fontSize: "0.9rem", padding: "0.65rem" }}
+              onClick={() => {
+                setProfileId(selectorClient.id);
+                setSelectorClient(null);
+              }}
+            >
+              👤 Fiche Client
+            </button>
+            <button
+              className="genia-btn-ghost"
+              style={{ width: "100%", fontSize: "0.9rem", padding: "0.65rem" }}
+              onClick={() => {
+                openEdit(selectorClient);
+                setSelectorClient(null);
+              }}
+            >
+              ✏️ Modifier
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Client Profile */}
       {profileId && <ClientProfile clientId={profileId} onClose={() => setProfileId(null)} />}
+
+      {/* Project Sheet */}
+      {projectClient && (
+        <ProjectSheet
+          clientId={projectClient.id}
+          clientName={projectClient.name}
+          onClose={() => setProjectClient(null)}
+        />
+      )}
 
       {/* Edit Modal */}
       {modalOpen && selected && (
