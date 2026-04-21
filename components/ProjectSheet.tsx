@@ -90,7 +90,7 @@ function StoryboardEditor({
   const frameBox: React.CSSProperties = {
     position: "relative",
     width: "100%",
-    paddingTop: "56.25%",
+    paddingTop: "177.78%", // 9:16 portrait
     background: "var(--bg)",
     border: "1px solid var(--border)",
     borderRadius: "8px",
@@ -113,7 +113,7 @@ function StoryboardEditor({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "1.25rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "1.25rem" }}>
         {frames.map((frame, idx) => (
           <div key={frame.id}>
             {/* Image zone */}
@@ -348,8 +348,12 @@ function StepDetailInner({
   );
 }
 
+function isStoryboardStep(step: Step) {
+  return step.id === "storyboard" || step.label.toLowerCase().includes("storyboard");
+}
+
 function StepDetail(props: { step: Step; projectId: string; onUpdate: (updated: Step) => void; onBack: () => void }) {
-  if (props.step.id === "storyboard") {
+  if (isStoryboardStep(props.step)) {
     return <StoryboardEditor step={props.step} projectId={props.projectId} onUpdate={props.onUpdate} onBack={props.onBack} />;
   }
   return <StepDetailInner {...props} />;
