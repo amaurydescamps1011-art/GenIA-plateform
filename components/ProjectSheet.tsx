@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import React, { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 
 type DriveLink = { id: string; label: string; url: string };
 type Step = { id: string; label: string; icon: string; content: string; images: string[]; driveLinks: DriveLink[] };
@@ -42,9 +42,145 @@ function parseSteps(raw: string): Step[] {
 }
 
 // ──────────────────────────────────────────────
+// Storyboard editor
+// ──────────────────────────────────────────────
+type Frame = { id: string; imageUrl: string; note: string };
+
+function parseFrames(raw: string): Frame[] {
+  if (!raw) return [];
+  try {
+    const p = JSON.parse(raw);
+    if (Array.isArray(p) && p.length > 0 && "imageUrl" in p[0]) return p;
+    return [];
+  } catch { return []; }
+}
+
+function StoryboardEditor({
+  step, projectId, onUpdate, onBack,
+}: {
+  step: Step; projectId: string; onUpdate: (updated: Step) => void; onBack: () => void;
+}) {
+  const [frames, setFrames] = useState<Frame[]>(() => {
+    const p = parseFrames(step.content);
+    return p.length > 0 ? p : [{ id: uid(), imageUrl: "", note: "" }, { id: uid(), imageUrl: "", note: "" }];
+  });
+  const [uploading, setUploading] = useState<string | null>(null);
+
+  function save(next: Frame[]) {
+    setFrames(next);
+    onUpdate({ ...step, content: JSON.stringify(next) });
+  }
+
+  function addFrame() { save([...frames, { id: uid(), imageUrl: "", note: "" }]); }
+  function removeFrame(id: string) { save(frames.filter(f => f.id !== id)); }
+  function updateNote(id: string, note: string) { save(frames.map(f => f.id === id ? { ...f, note } : f)); }
+
+  async function uploadFrame(id: string, file: File) {
+    setUploading(id);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/projects/" + projectId + "/upload", { method: "POST", body: fd });
+    if (res.ok) {
+      const data = await res.json();
+      save(frames.map(f => f.id === id ? { ...f, imageUrl: data.url as string } : f));
+    }
+    setUploading(null);
+  }
+
+  const frameBox: React.CSSProperties = {
+    position: "relative",
+    width: "100%",
+    paddingTop: "56.25%",
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: "8px",
+    overflow: "hidden",
+    cursor: "pointer",
+  };
+
+  const inset: React.CSSProperties = { position: "absolute", inset: 0 };
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "1.75rem 2rem" }}>
+      <div style={{ marginBottom: "1.5rem" }}>
+        <button onClick={onBack} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "var(--text-muted)", padding: 0, marginBottom: "0.875rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+          ← Étapes
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
+          <span style={{ fontSize: "2rem" }}>🎨</span>
+          <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>Storyboard</h2>
+          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>{frames.length} plan{frames.length > 1 ? "s" : ""}</span>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "1.25rem" }}>
+        {frames.map((frame, idx) => (
+          <div key={frame.id}>
+            {/* Image zone */}
+            <label style={{ cursor: uploading === frame.id ? "wait" : "pointer", display: "block" }}>
+              <div style={frameBox}>
+                <div style={inset}>
+                  {frame.imageUrl ? (
+                    <img src={frame.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <div style={{ ...inset, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: "0.25rem" }}>
+                      <span style={{ fontSize: "1.75rem" }}>📷</span>
+                      <span style={{ fontSize: "0.72rem" }}>{uploading === frame.id ? "Upload..." : "Cliquer pour ajouter"}</span>
+                    </div>
+                  )}
+                  {/* Frame number */}
+                  <div style={{ position: "absolute", top: "6px", left: "8px", background: "rgba(0,0,0,0.65)", color: "white", borderRadius: "4px", padding: "1px 7px", fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.03em" }}>
+                    {idx + 1}
+                  </div>
+                  {/* Delete */}
+                  <button
+                    onClick={e => { e.preventDefault(); removeFrame(frame.id); }}
+                    style={{ position: "absolute", top: "6px", right: "8px", background: "rgba(0,0,0,0.65)", border: "none", borderRadius: "50%", width: "22px", height: "22px", cursor: "pointer", color: "white", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
+                  >×</button>
+                  {/* Replace image hint on hover */}
+                  {frame.imageUrl && (
+                    <div
+                      style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.3rem", transition: "opacity 0.15s", opacity: 0 }}
+                      onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = "1"}
+                      onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = "0"}
+                    >
+                      <span style={{ fontSize: "0.7rem", color: "white" }}>Changer l&apos;image</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <input type="file" accept="image/*" style={{ display: "none" }} disabled={!!uploading}
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadFrame(frame.id, f); e.target.value = ""; }} />
+            </label>
+            {/* Caption */}
+            <input
+              className="genia-input"
+              style={{ marginTop: "0.5rem", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+              placeholder={"Plan " + (idx + 1) + " — description..."}
+              value={frame.note}
+              onChange={e => updateNote(frame.id, e.target.value)}
+            />
+          </div>
+        ))}
+
+        {/* Add frame tile */}
+        <div onClick={addFrame} style={{ cursor: "pointer" }}>
+          <div style={{ ...frameBox, border: "1px dashed var(--border)", background: "transparent" }}>
+            <div style={{ ...inset, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: "0.375rem" }}>
+              <span style={{ fontSize: "1.75rem" }}>+</span>
+              <span style={{ fontSize: "0.75rem" }}>Nouveau plan</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Step detail view
 // ──────────────────────────────────────────────
-function StepDetail({
+function StepDetailInner({
   step, projectId, onUpdate, onBack,
 }: {
   step: Step; projectId: string; onUpdate: (updated: Step) => void; onBack: () => void;
@@ -210,6 +346,13 @@ function StepDetail({
       </div>
     </div>
   );
+}
+
+function StepDetail(props: { step: Step; projectId: string; onUpdate: (updated: Step) => void; onBack: () => void }) {
+  if (props.step.id === "storyboard") {
+    return <StoryboardEditor step={props.step} projectId={props.projectId} onUpdate={props.onUpdate} onBack={props.onBack} />;
+  }
+  return <StepDetailInner {...props} />;
 }
 
 // ──────────────────────────────────────────────
