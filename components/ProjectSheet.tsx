@@ -259,6 +259,104 @@ function StepGrid({ steps, onSelect, onAddStep }: { steps: Step[]; onSelect: (s:
 }
 
 // ──────────────────────────────────────────────
+// Project media panel
+// ──────────────────────────────────────────────
+const MEDIA_CATS = [
+  { key: "logo", label: "Logo", icon: "🎨" },
+  { key: "avatar", label: "Avatar / Photo", icon: "👤" },
+  { key: "charte", label: "Charte graphique", icon: "🖌️" },
+  { key: "produit", label: "Produit", icon: "📦" },
+  { key: "autre", label: "Autre", icon: "📄" },
+];
+
+type MediaAsset = { id: string; name: string; category: string; url: string; fileType: string };
+
+function ProjectMedia({ projectId, clientId, onClose }: { projectId: string; clientId: string; onClose: () => void }) {
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [cat, setCat] = useState("logo");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/assets?projectId=" + projectId).then(r => r.ok ? r.json() : []).then(setAssets);
+  }, [projectId]);
+
+  async function upload(file: File) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", file.name.replace(/\.[^.]+$/, ""));
+    fd.append("category", cat);
+    fd.append("projectId", projectId);
+    fd.append("clientId", clientId);
+    const res = await fetch("/api/assets", { method: "POST", body: fd });
+    if (res.ok) { const a = await res.json(); setAssets(prev => [a, ...prev]); }
+    setUploading(false);
+  }
+
+  async function del(id: string) {
+    await fetch("/api/assets/" + id, { method: "DELETE" });
+    setAssets(prev => prev.filter(a => a.id !== id));
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "1.75rem 2rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
+        <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "var(--text-muted)", padding: 0 }}>← Étapes</button>
+        <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>📁 Médias du projet</h2>
+      </div>
+
+      {/* Upload */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.25rem", marginBottom: "1.5rem" }}>
+        <p style={{ margin: "0 0 0.75rem", fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ajouter un média</p>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+          {MEDIA_CATS.map(c => (
+            <button key={c.key} onClick={() => setCat(c.key)}
+              style={{ padding: "0.3rem 0.75rem", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", border: "1px solid " + (cat === c.key ? "var(--accent)" : "var(--border)"), background: cat === c.key ? "var(--accent-dim)" : "transparent", color: cat === c.key ? "var(--accent)" : "var(--text-muted)", fontWeight: cat === c.key ? 600 : 400 }}>
+              {c.icon} {c.label}
+            </button>
+          ))}
+        </div>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: uploading ? "wait" : "pointer", padding: "0.5rem 1.25rem", borderRadius: "8px", border: "1px dashed var(--border)", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+          {uploading ? "Upload..." : "+ Choisir un fichier"}
+          <input type="file" accept="image/*,application/pdf,video/*" style={{ display: "none" }} disabled={uploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
+        </label>
+      </div>
+
+      {/* Grid */}
+      {assets.length === 0 ? (
+        <div style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>Aucun média pour ce projet.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "0.875rem" }}>
+          {assets.map(a => {
+            const catInfo = MEDIA_CATS.find(c => c.key === a.category);
+            return (
+              <div key={a.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ height: "100px", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {a.fileType === "image"
+                    ? <img src={a.url} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                    : <span style={{ fontSize: "2.5rem" }}>{catInfo?.icon || "📄"}</span>}
+                </div>
+                <div style={{ padding: "0.5rem 0.625rem" }}>
+                  <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.2rem" }}>
+                    <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{catInfo?.label || a.category}</span>
+                    <div style={{ display: "flex", gap: "0.25rem" }}>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.65rem", color: "var(--accent)", textDecoration: "none" }}>↗</a>
+                      <button onClick={() => del(a.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#ef4444", fontSize: "0.7rem", padding: 0, lineHeight: 1 }}>×</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Main
 // ──────────────────────────────────────────────
 export default function ProjectSheet({ clientId, clientName, onClose }: { clientId: string; clientName: string; onClose: () => void }) {
@@ -271,6 +369,7 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("en_cours");
   const [dueDate, setDueDate] = useState("");
+  const [showMedia, setShowMedia] = useState(false);
   const titleTimer = useRef<NodeJS.Timeout | null>(null);
 
   const fetchProjects = useCallback(async () => {
@@ -409,12 +508,16 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
                 <input type="date" className="genia-input"
                   style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
                   value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProject({ dueDate: e.target.value }); }} />
-                {activeStep && (
-                  <button onClick={() => setActiveStep(null)}
+                {(activeStep || showMedia) && (
+                  <button onClick={() => { setActiveStep(null); setShowMedia(false); }}
                     style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", background: "transparent", cursor: "pointer", color: "var(--text-muted)" }}>
                     ⊞ Toutes les étapes
                   </button>
                 )}
+                <button onClick={() => { setShowMedia(!showMedia); setActiveStep(null); }}
+                  style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem", borderRadius: "6px", border: "1px solid " + (showMedia ? "var(--accent)" : "var(--border)"), background: showMedia ? "var(--accent-dim)" : "transparent", cursor: "pointer", color: showMedia ? "var(--accent)" : "var(--text-muted)" }}>
+                  📁 Médias
+                </button>
                 <button onClick={deleteProject}
                   style={{ fontSize: "0.75rem", padding: "0.3rem 0.625rem", borderRadius: "6px", border: "1px solid #ef4444", background: "transparent", color: "#ef4444", cursor: "pointer" }}>
                   Supprimer
@@ -422,7 +525,9 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
               </div>
 
               <div style={{ flex: 1, overflowY: "auto" }}>
-                {activeStep ? (
+                {showMedia ? (
+                  <ProjectMedia projectId={selected.id} clientId={clientId} onClose={() => setShowMedia(false)} />
+                ) : activeStep ? (
                   <StepDetail step={activeStep} projectId={selected.id} onUpdate={updateStep} onBack={() => setActiveStep(null)} />
                 ) : (
                   <StepGrid steps={steps} onSelect={(s) => setActiveStep(s)} onAddStep={addStep} />

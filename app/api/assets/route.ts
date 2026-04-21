@@ -11,18 +11,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("q") || "";
   const category = searchParams.get("category") || "";
+  const clientId = searchParams.get("clientId") || "";
+  const projectId = searchParams.get("projectId") || "";
 
   const assets = await prisma.asset.findMany({
     where: {
+      uploadedBy: user.id,
       AND: [
-        search ? {
-          OR: [
-            { name: { contains: search } },
-            { tags: { contains: search } },
-            { description: { contains: search } },
-          ],
-        } : {},
+        search ? { OR: [{ name: { contains: search } }, { tags: { contains: search } }, { description: { contains: search } }] } : {},
         category ? { category } : {},
+        clientId ? { clientId } : {},
+        projectId ? { projectId } : {},
       ],
     },
     include: { user: { select: { name: true, email: true } } },
@@ -42,6 +41,8 @@ export async function POST(req: NextRequest) {
   const description = formData.get("description") as string;
   const category = formData.get("category") as string;
   const tags = formData.get("tags") as string;
+  const clientId = (formData.get("clientId") as string) || "";
+  const projectId = (formData.get("projectId") as string) || "";
 
   if (!file) return NextResponse.json({ error: "Fichier manquant" }, { status: 400 });
 
@@ -64,9 +65,11 @@ export async function POST(req: NextRequest) {
       fileType: getFileType(file.type),
       fileSize: file.size,
       mimeType: file.type,
-      category: category || "other",
+      category: category || "autre",
       tags: tags || "",
       url: `/uploads/${safeName}`,
+      clientId,
+      projectId,
       uploadedBy: user.id,
     },
     include: { user: { select: { name: true, email: true } } },

@@ -69,6 +69,8 @@ model Asset {
   url         String
   thumbnail   String?
   isPublic    Boolean  @default(true)
+  clientId    String   @default("")
+  projectId   String   @default("")
   uploadedBy  String
   user        User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
