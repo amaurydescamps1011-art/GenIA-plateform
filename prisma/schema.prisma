@@ -30,6 +30,10 @@ model Client {
   name        String
   status      String   @default("prospect")
   budget      Float?
+  email       String   @default("")
+  phone       String   @default("")
+  address     String   @default("")
+  siret       String   @default("")
   notes       String   @default("")
   tags        String   @default("")
   contact     String   @default("")

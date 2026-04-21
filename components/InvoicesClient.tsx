@@ -313,7 +313,7 @@ export default function InvoicesClient() {
     }
     if (cr.ok) {
       const data = await cr.json();
-      setClients(data.map((c: { id: string; name: string; contact?: string }) => ({ id: c.id, name: c.name, email: c.contact || "", address: "" })));
+      setClients(data.map((c: { id: string; name: string; email?: string; address?: string }) => ({ id: c.id, name: c.name, email: c.email || "", address: c.address || "" })));
     }
     setLoading(false);
   }, []);

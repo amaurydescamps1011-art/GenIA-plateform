@@ -7,6 +7,10 @@ type Client = {
   name: string;
   status: string;
   budget: number | null;
+  email: string;
+  phone: string;
+  address: string;
+  siret: string;
   notes: string;
   tags: string;
   contact: string;
@@ -337,6 +341,11 @@ export default function CRMClient({
                           {client.budget.toLocaleString("fr-FR")} €
                         </p>
                       )}
+                      {client.email && (
+                        <p style={{ margin: "0.2rem 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                          {client.email}
+                        </p>
+                      )}
                       {client.notes && (
                         <p
                           style={{
@@ -470,7 +479,38 @@ export default function CRMClient({
                 className="genia-input"
                 value={editForm.contact || ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value }))}
-                placeholder="Email / téléphone"
+                placeholder="Nom du contact"
+              />
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>Email de facturation</label>
+              <input
+                className="genia-input"
+                type="email"
+                value={editForm.email || ""}
+                onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="email@client.com"
+              />
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>Téléphone</label>
+              <input
+                className="genia-input"
+                value={editForm.phone || ""}
+                onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="+33 6 00 00 00 00"
+              />
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>Adresse de facturation</label>
+              <textarea
+                className="genia-input"
+                value={editForm.address || ""}
+                onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder={"12 rue de la Paix\n75001 Paris"}
+                rows={3}
+                style={{ resize: "vertical" }}
+              />
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>SIRET</label>
+              <input
+                className="genia-input"
+                value={editForm.siret || ""}
+                onChange={(e) => setEditForm((f) => ({ ...f, siret: e.target.value }))}
+                placeholder="123 456 789 00012"
               />
               <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>Google Drive</label>
               <input
