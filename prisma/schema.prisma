@@ -20,7 +20,8 @@ model User {
   sessions  Session[]
   clients   Client[]
   todos        Todo[]
-  sopContents SOPContent[]
+  sopContents   SOPContent[]
+  sopSteps     SOPStepContent[]
 }
 
 model Client {
@@ -85,4 +86,17 @@ model SOPContent {
   user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@unique([moduleId, createdBy])
+}
+
+model SOPStepContent {
+  id        String   @id @default(cuid())
+  stepId    String
+  moduleId  String
+  content   String   @default("")
+  videoUrl  String   @default("")
+  updatedAt DateTime @updatedAt
+  createdBy String
+  user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, createdBy])
 }
