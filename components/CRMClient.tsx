@@ -1,6 +1,7 @@
 "use client";
 
 import { CSSProperties, useEffect, useState, useCallback } from "react";
+import ClientProfile from "./ClientProfile";
 
 type Client = {
   id: string;
@@ -44,6 +45,7 @@ export default function CRMClient({
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [editForm, setEditForm] = useState<Partial<Client>>({});
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   const showToast = useCallback((message: string) => {
     const id = Date.now();
@@ -366,9 +368,14 @@ export default function CRMClient({
                         gap: "0.25rem",
                         marginTop: "0.5rem",
                         justifyContent: "flex-end",
+                        flexWrap: "wrap",
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
+                      <button
+                        style={{ fontSize: "0.7rem", padding: "2px 7px", borderRadius: "4px", border: "1px solid var(--accent)", background: "transparent", cursor: "pointer", color: "var(--accent)", fontWeight: 600 }}
+                        onClick={() => setProfileId(client.id)}
+                      >Fiche</button>
                       {colIdx > 0 && (
                         <button
                           style={{
@@ -411,6 +418,9 @@ export default function CRMClient({
           );
         })}
       </div>
+
+      {/* Client Profile */}
+      {profileId && <ClientProfile clientId={profileId} onClose={() => setProfileId(null)} />}
 
       {/* Edit Modal */}
       {modalOpen && selected && (

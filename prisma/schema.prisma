@@ -25,6 +25,7 @@ model User {
   invoices     Invoice[]
   expenses     Expense[]
   socialPosts  SocialPost[]
+  portfolios   Portfolio[]
 }
 
 model Client {
@@ -162,4 +163,21 @@ model SocialPost {
   updatedAt   DateTime @updatedAt
   createdBy   String
   user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+model Portfolio {
+  id            String   @id @default(cuid())
+  title         String
+  description   String   @default("")
+  clientId      String   @default("")
+  clientName    String   @default("")
+  fileUrl       String   @default("")
+  thumbnailUrl  String   @default("")
+  type          String   @default("video")
+  tags          String   @default("")
+  publishOnSite Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String
+  user          User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
