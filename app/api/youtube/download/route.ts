@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
-const COBALT_API = "https://api.cobalt.tools/";
+const COBALT_API = (() => { const base = process.env.COBALT_API_URL || "https://api.cobalt.tools"; return base.endsWith("/") ? base : base + "/"; })();
 
 async function getCobaltUrl(youtubeUrl: string): Promise<{ url: string; filename: string }> {
   const res = await fetch(COBALT_API, {
