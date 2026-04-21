@@ -2,7 +2,8 @@
 
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 
-type CheckItem = { id: string; label: string; done: boolean };
+type DriveLink = { id: string; label: string; url: string };
+type Step = { id: string; label: string; icon: string; content: string; images: string[]; driveLinks: DriveLink[] };
 
 type Project = {
   id: string;
@@ -10,8 +11,6 @@ type Project = {
   clientName: string;
   title: string;
   status: string;
-  script: string;
-  notes: string;
   checklist: string;
   dueDate: string;
   createdAt: string;
@@ -27,241 +26,275 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function parseChecklist(raw: string): CheckItem[] {
+function parseSteps(raw: string): Step[] {
   try {
-    return JSON.parse(raw);
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+    if ("done" in arr[0] && !("content" in arr[0])) {
+      return arr.map((s: { id: string; label: string }) => ({
+        id: s.id, label: s.label, icon: "📄", content: "", images: [], driveLinks: [],
+      }));
+    }
+    return arr;
   } catch {
     return [];
   }
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_OPTIONS.find((o) => o.key === status) || STATUS_OPTIONS[0];
-  return (
-    <span
-      style={{
-        fontSize: "0.72rem",
-        fontWeight: 700,
-        padding: "2px 8px",
-        borderRadius: "999px",
-        background: s.color + "22",
-        color: s.color,
-        letterSpacing: "0.03em",
-      }}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-function ChecklistEditor({
-  items,
-  onChange,
+// ──────────────────────────────────────────────
+// Step detail view
+// ──────────────────────────────────────────────
+function StepDetail({
+  step, projectId, onUpdate, onBack,
 }: {
-  items: CheckItem[];
-  onChange: (items: CheckItem[]) => void;
+  step: Step; projectId: string; onUpdate: (updated: Step) => void; onBack: () => void;
 }) {
+  const [content, setContent] = useState(step.content);
+  const [driveLinks, setDriveLinks] = useState<DriveLink[]>(step.driveLinks || []);
+  const [images, setImages] = useState<string[]>(step.images || []);
+  const [newUrl, setNewUrl] = useState("");
   const [newLabel, setNewLabel] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const saveTimer = useRef<NodeJS.Timeout | null>(null);
 
-  function toggle(id: string) {
-    onChange(items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
+  useEffect(() => {
+    setContent(step.content);
+    setDriveLinks(step.driveLinks || []);
+    setImages(step.images || []);
+  }, [step.id]);
+
+  function triggerSave(patch: Partial<Step>) {
+    const next: Step = { ...step, content, driveLinks, images, ...patch };
+    onUpdate(next);
   }
 
-  function remove(id: string) {
-    onChange(items.filter((i) => i.id !== id));
+  function debounce(patch: Partial<Step>) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => triggerSave(patch), 700);
   }
 
-  function add() {
-    if (!newLabel.trim()) return;
-    onChange([...items, { id: uid(), label: newLabel.trim(), done: false }]);
+  function addDriveLink() {
+    if (!newUrl.trim()) return;
+    const link: DriveLink = { id: uid(), label: newLabel.trim() || "Lien Drive", url: newUrl.trim() };
+    const next = [...driveLinks, link];
+    setDriveLinks(next);
+    setNewUrl("");
     setNewLabel("");
+    triggerSave({ driveLinks: next });
   }
 
-  const done = items.filter((i) => i.done).length;
+  function removeDriveLink(id: string) {
+    const next = driveLinks.filter((l) => l.id !== id);
+    setDriveLinks(next);
+    triggerSave({ driveLinks: next });
+  }
+
+  async function uploadImage(file: File) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/projects/" + projectId + "/upload", { method: "POST", body: fd });
+    if (res.ok) {
+      const data = await res.json();
+      const next = [...images, data.url as string];
+      setImages(next);
+      triggerSave({ images: next });
+    }
+    setUploading(false);
+  }
+
+  function removeImage(url: string) {
+    const next = images.filter((i) => i !== url);
+    setImages(next);
+    triggerSave({ images: next });
+  }
+
+  const sectionCard: CSSProperties = {
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: "10px",
+    padding: "1.25rem",
+    marginBottom: "1.25rem",
+  };
+
+  const sectionLabel: CSSProperties = {
+    fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)",
+    textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 0.75rem 0",
+  };
 
   return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "0.75rem",
-        }}
-      >
-        <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          Checklist production
-        </span>
-        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-          {done}/{items.length}
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <div
-        style={{
-          height: "4px",
-          background: "var(--border)",
-          borderRadius: "999px",
-          marginBottom: "1rem",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: items.length > 0 ? (done / items.length) * 100 + "%" : "0%",
-            background: "#22c55e",
-            borderRadius: "999px",
-            transition: "width 0.3s",
-          }}
-        />
-      </div>
-
-      {/* Items */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.75rem" }}>
-        {items.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.625rem",
-              padding: "0.5rem 0.625rem",
-              borderRadius: "6px",
-              background: item.done ? "rgba(34,197,94,0.07)" : "var(--bg)",
-              border: "1px solid " + (item.done ? "rgba(34,197,94,0.2)" : "var(--border)"),
-              cursor: "pointer",
-            }}
-            onClick={() => toggle(item.id)}
-          >
-            <div
-              style={{
-                width: "16px",
-                height: "16px",
-                borderRadius: "4px",
-                border: "2px solid " + (item.done ? "#22c55e" : "var(--border)"),
-                background: item.done ? "#22c55e" : "transparent",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                transition: "all 0.15s",
-              }}
-            >
-              {item.done && (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </div>
-            <span
-              style={{
-                fontSize: "0.85rem",
-                flex: 1,
-                color: item.done ? "var(--text-muted)" : "var(--text)",
-                textDecoration: item.done ? "line-through" : "none",
-              }}
-            >
-              {item.label}
-            </span>
-            <button
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                fontSize: "0.9rem",
-                padding: "0 2px",
-                lineHeight: 1,
-                opacity: 0.5,
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                remove(item.id);
-              }}
-              title="Supprimer"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Add item */}
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <input
-          className="genia-input"
-          style={{ flex: 1, fontSize: "0.82rem" }}
-          placeholder="Ajouter une étape..."
-          value={newLabel}
-          onChange={(e) => setNewLabel(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") add();
-          }}
-        />
+    <div style={{ flex: 1, overflowY: "auto", padding: "1.75rem 2rem" }}>
+      <div style={{ marginBottom: "1.75rem" }}>
         <button
-          className="genia-btn"
-          style={{ fontSize: "0.82rem", padding: "0.4rem 0.75rem", whiteSpace: "nowrap" }}
-          onClick={add}
+          onClick={onBack}
+          style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "var(--text-muted)", padding: 0, marginBottom: "0.875rem", display: "flex", alignItems: "center", gap: "0.375rem" }}
         >
-          + Étape
+          ← Étapes
         </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
+          <span style={{ fontSize: "2rem" }}>{step.icon}</span>
+          <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>{step.label}</h2>
+        </div>
+      </div>
+
+      {/* Contenu */}
+      <div style={sectionCard}>
+        <p style={sectionLabel}>Contenu</p>
+        <textarea
+          style={{
+            width: "100%", minHeight: "200px", background: "var(--bg)", border: "1px solid var(--border)",
+            borderRadius: "7px", padding: "0.875rem", fontSize: "0.9rem", lineHeight: 1.7, color: "var(--text)",
+            resize: "vertical", fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+          }}
+          placeholder="Notes, script, détails..."
+          value={content}
+          onChange={(e) => { setContent(e.target.value); debounce({ content: e.target.value }); }}
+        />
+      </div>
+
+      {/* Images */}
+      <div style={sectionCard}>
+        <p style={sectionLabel}>Images & références</p>
+        {images.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "0.625rem", marginBottom: "1rem" }}>
+            {images.map((url) => (
+              <div key={url} style={{ position: "relative", borderRadius: "6px", overflow: "hidden" }}>
+                <img src={url} alt="" style={{ width: "100%", height: "90px", objectFit: "cover", display: "block" }} />
+                <button
+                  onClick={() => removeImage(url)}
+                  style={{ position: "absolute", top: "4px", right: "4px", background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", color: "white", fontSize: "0.75rem", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: uploading ? "wait" : "pointer", padding: "0.5rem 1rem", borderRadius: "7px", border: "1px dashed var(--border)", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+          {uploading ? "Upload en cours..." : "+ Ajouter une image"}
+          <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploading}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }} />
+        </label>
+      </div>
+
+      {/* Liens Drive */}
+      <div style={sectionCard}>
+        <p style={sectionLabel}>Liens Drive</p>
+        {driveLinks.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
+            {driveLinks.map((link) => (
+              <div key={link.id} style={{ display: "flex", alignItems: "center" }}>
+                <a href={link.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 0.875rem", borderRadius: "6px 0 0 6px", background: "#1e40af22", border: "1px solid #3b82f660", color: "#60a5fa", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none" }}
+                >
+                  🔗 {link.label}
+                </a>
+                <button onClick={() => removeDriveLink(link.id)}
+                  style={{ padding: "0.4rem 0.5rem", borderRadius: "0 6px 6px 0", border: "1px solid #3b82f660", borderLeft: "none", background: "#1e40af22", color: "#60a5fa", cursor: "pointer", fontSize: "0.75rem", lineHeight: 1 }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <input className="genia-input" style={{ flex: 2, minWidth: "200px", fontSize: "0.82rem" }}
+            placeholder="https://drive.google.com/..." value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addDriveLink(); }} />
+          <input className="genia-input" style={{ flex: 1, minWidth: "120px", fontSize: "0.82rem" }}
+            placeholder="Label (ex: Dossier rushes)" value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addDriveLink(); }} />
+          <button className="genia-btn" style={{ fontSize: "0.82rem", padding: "0.4rem 0.875rem", whiteSpace: "nowrap" }} onClick={addDriveLink}>
+            + Lien
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-export default function ProjectSheet({
-  clientId,
-  clientName,
-  onClose,
-}: {
-  clientId: string;
-  clientName: string;
-  onClose: () => void;
-}) {
+// ──────────────────────────────────────────────
+// Step grid
+// ──────────────────────────────────────────────
+function StepGrid({ steps, onSelect, onAddStep }: { steps: Step[]; onSelect: (s: Step) => void; onAddStep: () => void }) {
+  return (
+    <div style={{ padding: "1.75rem 2rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "1rem" }}>
+        {steps.map((step) => {
+          const hasContent = step.content.trim().length > 0;
+          const imgCount = (step.images || []).length;
+          const linkCount = (step.driveLinks || []).length;
+          const filled = hasContent || imgCount > 0 || linkCount > 0;
+          return (
+            <div key={step.id} onClick={() => onSelect(step)}
+              style={{ background: "var(--surface)", border: "1px solid " + (filled ? "var(--accent)" : "var(--border)"), borderRadius: "12px", padding: "1.25rem", cursor: "pointer", display: "flex", flexDirection: "column", gap: "0.625rem", minHeight: "140px", transition: "box-shadow 0.15s, transform 0.1s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.15)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
+            >
+              <span style={{ fontSize: "1.75rem" }}>{step.icon}</span>
+              <p style={{ margin: 0, fontWeight: 600, fontSize: "0.875rem", color: "var(--text)" }}>{step.label}</p>
+              {hasContent && (
+                <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                  {step.content.slice(0, 60)}{step.content.length > 60 ? "..." : ""}
+                </p>
+              )}
+              {(imgCount > 0 || linkCount > 0) && (
+                <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+                  {imgCount > 0 && <span style={{ fontSize: "0.68rem", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "4px", padding: "1px 6px", color: "var(--text-muted)" }}>📸 {imgCount}</span>}
+                  {linkCount > 0 && <span style={{ fontSize: "0.68rem", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "4px", padding: "1px 6px", color: "var(--text-muted)" }}>🔗 {linkCount}</span>}
+                </div>
+              )}
+              {!filled && <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--text-muted)" }}>Vide — cliquer pour remplir</p>}
+            </div>
+          );
+        })}
+        <div onClick={onAddStep}
+          style={{ background: "transparent", border: "1px dashed var(--border)", borderRadius: "12px", padding: "1.25rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", minHeight: "140px", color: "var(--text-muted)" }}
+        >
+          <span style={{ fontSize: "1.5rem" }}>+</span>
+          <span style={{ fontSize: "0.8rem" }}>Nouvelle étape</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Main
+// ──────────────────────────────────────────────
+export default function ProjectSheet({ clientId, clientName, onClose }: { clientId: string; clientName: string; onClose: () => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<Project | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [activeStep, setActiveStep] = useState<Step | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // Local editable state for selected project
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("en_cours");
   const [dueDate, setDueDate] = useState("");
-  const [checklist, setChecklist] = useState<CheckItem[]>([]);
-  const [script, setScript] = useState("");
-  const [notes, setNotes] = useState("");
-  const saveTimer = useRef<NodeJS.Timeout | null>(null);
+  const titleTimer = useRef<NodeJS.Timeout | null>(null);
 
   const fetchProjects = useCallback(async () => {
     const res = await fetch("/api/projects?clientId=" + clientId);
     if (res.ok) {
       const data = await res.json();
       setProjects(data);
-      if (!selected && data.length > 0) {
-        loadProject(data[0]);
-      }
+      if (data.length > 0) loadProject(data[0]);
     }
     setLoading(false);
   }, [clientId]);
 
-  useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   function loadProject(p: Project) {
     setSelected(p);
     setTitle(p.title);
     setStatus(p.status);
     setDueDate(p.dueDate || "");
-    setChecklist(parseChecklist(p.checklist));
-    setScript(p.script || "");
-    setNotes(p.notes || "");
+    setSteps(parseSteps(p.checklist));
+    setActiveStep(null);
   }
 
-  async function saveProject(patch: Record<string, unknown>) {
+  async function saveProject(patch: Record<string, string>) {
     if (!selected) return;
     setSaving(true);
     await fetch("/api/projects/" + selected.id, {
@@ -270,14 +303,24 @@ export default function ProjectSheet({
       body: JSON.stringify(patch),
     });
     setSaving(false);
-    setProjects((prev) =>
-      prev.map((p) => (p.id === selected.id ? { ...p, ...patch } : p))
-    );
+    setProjects((prev) => prev.map((p) => p.id === selected.id ? { ...p, ...patch } : p));
   }
 
-  function debounceSave(patch: Record<string, unknown>) {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveProject(patch), 800);
+  async function updateStep(updated: Step) {
+    const newSteps = steps.map((s) => s.id === updated.id ? updated : s);
+    setSteps(newSteps);
+    setActiveStep(updated);
+    await saveProject({ checklist: JSON.stringify(newSteps) });
+  }
+
+  async function addStep() {
+    const label = prompt("Nom de l'étape :");
+    if (!label) return;
+    const newStep: Step = { id: uid(), label, icon: "📄", content: "", images: [], driveLinks: [] };
+    const newSteps = [...steps, newStep];
+    setSteps(newSteps);
+    await saveProject({ checklist: JSON.stringify(newSteps) });
+    setActiveStep(newStep);
   }
 
   async function createProject() {
@@ -294,363 +337,98 @@ export default function ProjectSheet({
   }
 
   async function deleteProject() {
-    if (!selected) return;
-    if (!confirm("Supprimer ce projet ?")) return;
+    if (!selected || !confirm("Supprimer ce projet ?")) return;
     await fetch("/api/projects/" + selected.id, { method: "DELETE" });
     const next = projects.filter((p) => p.id !== selected.id);
     setProjects(next);
-    if (next.length > 0) {
-      loadProject(next[0]);
-    } else {
-      setSelected(null);
-    }
+    if (next.length > 0) loadProject(next[0]);
+    else { setSelected(null); setSteps([]); setActiveStep(null); }
   }
 
-  const overlayStyle: CSSProperties = {
-    position: "fixed",
-    left: "220px",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    background: "var(--bg)",
-    display: "flex",
-    flexDirection: "column",
-    zIndex: 150,
-  };
-
-  const sidebarStyle: CSSProperties = {
-    width: "260px",
-    minWidth: "260px",
-    borderRight: "1px solid var(--border)",
-    display: "flex",
-    flexDirection: "column",
-    background: "var(--surface)",
-  };
-
-  const mainStyle: CSSProperties = {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    overflowY: "auto",
-  };
-
   return (
-    <div style={overlayStyle}>
-      {/* Top bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          padding: "0.875rem 1.5rem",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--surface)",
-          flexShrink: 0,
-        }}
-      >
-        <button
-          style={{
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            fontSize: "1.25rem",
-            color: "var(--text-muted)",
-            lineHeight: 1,
-            padding: "0 0.25rem",
-          }}
-          onClick={onClose}
-          title="Fermer"
-        >
-          ←
-        </button>
+    <div style={{ position: "fixed", left: "220px", top: 0, right: 0, bottom: 0, background: "var(--bg)", display: "flex", flexDirection: "column", zIndex: 150 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "0.75rem 1.5rem", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
+        <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "var(--text-muted)", padding: "0 0.25rem" }}>←</button>
         <div>
-          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Projets de
-          </span>
-          <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>{clientName}</h2>
+          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Projets de</span>
+          <h2 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700 }}>{clientName}</h2>
         </div>
-        {saving && (
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: "auto" }}>
-            Sauvegarde...
-          </span>
-        )}
+        {saving && <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginLeft: "auto" }}>Sauvegarde...</span>}
       </div>
 
-      {/* Body */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Left sidebar — project list */}
-        <div style={sidebarStyle}>
-          <div style={{ padding: "0.875rem", borderBottom: "1px solid var(--border)" }}>
-            <button className="genia-btn" style={{ width: "100%", fontSize: "0.82rem" }} onClick={createProject}>
-              + Nouveau projet
-            </button>
+        {/* Sidebar */}
+        <div style={{ width: "240px", minWidth: "240px", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", background: "var(--surface)" }}>
+          <div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+            <button className="genia-btn" style={{ width: "100%", fontSize: "0.8rem" }} onClick={createProject}>+ Nouveau projet</button>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "0.5rem" }}>
             {loading ? (
-              <p style={{ padding: "1rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>Chargement...</p>
+              <p style={{ padding: "1rem", color: "var(--text-muted)", fontSize: "0.82rem" }}>Chargement...</p>
             ) : projects.length === 0 ? (
-              <p style={{ padding: "1rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                Aucun projet. Crée le premier !
-              </p>
-            ) : (
-              projects.map((p) => {
-                const isActive = selected?.id === p.id;
-                const items = parseChecklist(p.checklist);
-                const done = items.filter((i) => i.done).length;
-                const pct = items.length > 0 ? Math.round((done / items.length) * 100) : 0;
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => loadProject(p)}
-                    style={{
-                      padding: "0.625rem 0.75rem",
-                      borderRadius: "7px",
-                      cursor: "pointer",
-                      marginBottom: "0.25rem",
-                      background: isActive ? "var(--accent-dim)" : "transparent",
-                      border: "1px solid " + (isActive ? "var(--accent)" : "transparent"),
-                    }}
-                  >
-                    <p
-                      style={{
-                        margin: 0,
-                        fontWeight: isActive ? 600 : 400,
-                        fontSize: "0.85rem",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        color: "var(--text)",
-                      }}
-                    >
-                      {p.title}
-                    </p>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.35rem" }}>
-                      <StatusBadge status={p.status} />
-                      {items.length > 0 && (
-                        <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{pct}%</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+              <p style={{ padding: "1rem", color: "var(--text-muted)", fontSize: "0.82rem" }}>Crée le premier projet</p>
+            ) : projects.map((p) => {
+              const isActive = selected?.id === p.id;
+              const s = STATUS_OPTIONS.find((o) => o.key === p.status) || STATUS_OPTIONS[0];
+              return (
+                <div key={p.id} onClick={() => loadProject(p)}
+                  style={{ padding: "0.625rem 0.75rem", borderRadius: "7px", cursor: "pointer", marginBottom: "0.25rem", background: isActive ? "var(--accent-dim)" : "transparent", border: "1px solid " + (isActive ? "var(--accent)" : "transparent") }}
+                >
+                  <p style={{ margin: 0, fontWeight: isActive ? 600 : 400, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</p>
+                  <span style={{ fontSize: "0.68rem", color: s.color, fontWeight: 600 }}>{s.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Main content */}
-        <div style={mainStyle}>
+        {/* Main */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {!selected ? (
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--text-muted)",
-                gap: "1rem",
-              }}
-            >
-              <p style={{ fontSize: "1rem" }}>Sélectionne ou crée un projet</p>
-              <button className="genia-btn" onClick={createProject}>
-                + Nouveau projet
-              </button>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "1rem", color: "var(--text-muted)" }}>
+              <p>Sélectionne ou crée un projet</p>
+              <button className="genia-btn" onClick={createProject}>+ Nouveau projet</button>
             </div>
           ) : (
-            <div style={{ padding: "2rem", maxWidth: "860px", width: "100%" }}>
-              {/* Project header */}
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "2rem" }}>
-                <div style={{ flex: 1 }}>
-                  <input
-                    style={{
-                      width: "100%",
-                      fontSize: "1.5rem",
-                      fontWeight: 700,
-                      background: "transparent",
-                      border: "none",
-                      outline: "none",
-                      color: "var(--text)",
-                      padding: 0,
-                      marginBottom: "0.75rem",
-                    }}
-                    value={title}
-                    onChange={(e) => {
-                      setTitle(e.target.value);
-                      debounceSave({ title: e.target.value });
-                    }}
-                    placeholder="Titre du projet"
-                  />
-                  <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-                    <select
-                      className="genia-input"
-                      style={{
-                        background: "var(--surface)",
-                        color: "var(--text)",
-                        fontSize: "0.82rem",
-                        padding: "0.3rem 0.6rem",
-                        width: "auto",
-                      }}
-                      value={status}
-                      onChange={(e) => {
-                        setStatus(e.target.value);
-                        saveProject({ status: e.target.value });
-                      }}
-                    >
-                      {STATUS_OPTIONS.map((s) => (
-                        <option key={s.key} value={s.key}>{s.label}</option>
-                      ))}
-                    </select>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Échéance :</span>
-                      <input
-                        type="date"
-                        className="genia-input"
-                        style={{
-                          fontSize: "0.82rem",
-                          padding: "0.3rem 0.6rem",
-                          background: "var(--surface)",
-                          color: "var(--text)",
-                          width: "auto",
-                        }}
-                        value={dueDate}
-                        onChange={(e) => {
-                          setDueDate(e.target.value);
-                          debounceSave({ dueDate: e.target.value });
-                        }}
-                      />
-                    </div>
-                    <button
-                      style={{
-                        marginLeft: "auto",
-                        fontSize: "0.78rem",
-                        padding: "0.3rem 0.75rem",
-                        borderRadius: "6px",
-                        border: "1px solid #ef4444",
-                        background: "transparent",
-                        color: "#ef4444",
-                        cursor: "pointer",
-                      }}
-                      onClick={deleteProject}
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Checklist */}
-              <div
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "10px",
-                  padding: "1.25rem",
-                  marginBottom: "1.5rem",
-                }}
-              >
-                <ChecklistEditor
-                  items={checklist}
-                  onChange={(items) => {
-                    setChecklist(items);
-                    debounceSave({ checklist: JSON.stringify(items) });
-                  }}
-                />
-              </div>
-
-              {/* Script */}
-              <div
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "10px",
-                  padding: "1.25rem",
-                  marginBottom: "1.5rem",
-                }}
-              >
-                <p
-                  style={{
-                    margin: "0 0 0.75rem 0",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    color: "var(--text-muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}
-                >
-                  Script / Voix off
-                </p>
-                <textarea
-                  style={{
-                    width: "100%",
-                    minHeight: "220px",
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "7px",
-                    padding: "0.875rem",
-                    fontSize: "0.9rem",
-                    lineHeight: 1.65,
-                    color: "var(--text)",
-                    resize: "vertical",
-                    fontFamily: "inherit",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                  placeholder="Écris le script ici... hook, voix off, CTA, etc."
-                  value={script}
+            <>
+              <div style={{ padding: "0.875rem 1.75rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.875rem", flexWrap: "wrap", background: "var(--surface)", flexShrink: 0 }}>
+                <input
+                  style={{ fontSize: "1rem", fontWeight: 700, background: "transparent", border: "none", outline: "none", color: "var(--text)", padding: 0, minWidth: "160px", flex: 1 }}
+                  value={title}
                   onChange={(e) => {
-                    setScript(e.target.value);
-                    debounceSave({ script: e.target.value });
+                    setTitle(e.target.value);
+                    if (titleTimer.current) clearTimeout(titleTimer.current);
+                    titleTimer.current = setTimeout(() => saveProject({ title: e.target.value }), 800);
                   }}
+                  placeholder="Titre du projet"
                 />
+                <select className="genia-input" style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
+                  value={status} onChange={(e) => { setStatus(e.target.value); saveProject({ status: e.target.value }); }}>
+                  {STATUS_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+                <input type="date" className="genia-input"
+                  style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
+                  value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProject({ dueDate: e.target.value }); }} />
+                {activeStep && (
+                  <button onClick={() => setActiveStep(null)}
+                    style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", background: "transparent", cursor: "pointer", color: "var(--text-muted)" }}>
+                    ⊞ Toutes les étapes
+                  </button>
+                )}
+                <button onClick={deleteProject}
+                  style={{ fontSize: "0.75rem", padding: "0.3rem 0.625rem", borderRadius: "6px", border: "1px solid #ef4444", background: "transparent", color: "#ef4444", cursor: "pointer" }}>
+                  Supprimer
+                </button>
               </div>
 
-              {/* Notes */}
-              <div
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "10px",
-                  padding: "1.25rem",
-                  marginBottom: "2rem",
-                }}
-              >
-                <p
-                  style={{
-                    margin: "0 0 0.75rem 0",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    color: "var(--text-muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}
-                >
-                  Notes & briefing
-                </p>
-                <textarea
-                  style={{
-                    width: "100%",
-                    minHeight: "120px",
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "7px",
-                    padding: "0.875rem",
-                    fontSize: "0.875rem",
-                    lineHeight: 1.6,
-                    color: "var(--text)",
-                    resize: "vertical",
-                    fontFamily: "inherit",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                  placeholder="Notes, références, lien Drive, détails du brief..."
-                  value={notes}
-                  onChange={(e) => {
-                    setNotes(e.target.value);
-                    debounceSave({ notes: e.target.value });
-                  }}
-                />
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                {activeStep ? (
+                  <StepDetail step={activeStep} projectId={selected.id} onUpdate={updateStep} onBack={() => setActiveStep(null)} />
+                ) : (
+                  <StepGrid steps={steps} onSelect={(s) => setActiveStep(s)} onAddStep={addStep} />
+                )}
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

@@ -19,16 +19,14 @@ export async function GET(req: NextRequest) {
 }
 
 const DEFAULT_CHECKLIST = JSON.stringify([
-  { id: "1", label: "Brief client validé", done: false },
-  { id: "2", label: "Script rédigé", done: false },
-  { id: "3", label: "Storyboard / plan de tournage", done: false },
-  { id: "4", label: "Tournage effectué", done: false },
-  { id: "5", label: "Montage v1", done: false },
-  { id: "6", label: "Révision client", done: false },
-  { id: "7", label: "Corrections finales", done: false },
-  { id: "8", label: "Livraison finale", done: false },
-  { id: "9", label: "Facture envoyée", done: false },
-  { id: "10", label: "Paiement reçu", done: false },
+  { id: "brief", label: "Brief & cahier des charges", icon: "📋", content: "", images: [], driveLinks: [] },
+  { id: "script", label: "Script / Voix off", icon: "✍️", content: "", images: [], driveLinks: [] },
+  { id: "storyboard", label: "Storyboard", icon: "🎨", content: "", images: [], driveLinks: [] },
+  { id: "tournage", label: "Plan de tournage", icon: "🎬", content: "", images: [], driveLinks: [] },
+  { id: "assets", label: "Assets & ressources", icon: "📁", content: "", images: [], driveLinks: [] },
+  { id: "montage", label: "Montage", icon: "✂️", content: "", images: [], driveLinks: [] },
+  { id: "revision", label: "Révision client", icon: "👁", content: "", images: [], driveLinks: [] },
+  { id: "livraison", label: "Livraison finale", icon: "📦", content: "", images: [], driveLinks: [] },
 ]);
 
 export async function POST(req: NextRequest) {
