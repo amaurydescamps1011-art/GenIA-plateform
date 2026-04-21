@@ -23,6 +23,7 @@ model User {
   sopContents   SOPContent[]
   sopSteps     SOPStepContent[]
   invoices     Invoice[]
+  expenses     Expense[]
 }
 
 model Client {
@@ -129,4 +130,18 @@ model Invoice {
   updatedAt     DateTime @updatedAt
   createdBy     String
   user          User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  label     String
+  amount    Float
+  category  String   @default("autre")
+  date      String
+  fileUrl   String   @default("")
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+  user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
