@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { id } = await params;
   const body = await req.json();
   const project = await prisma.project.updateMany({
-    where: { id: params.id, createdBy: user.id },
+    where: { id, createdBy: user.id },
     data: {
       ...(body.title !== undefined && { title: body.title }),
       ...(body.status !== undefined && { status: body.status }),
@@ -21,10 +22,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(project);
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.project.deleteMany({ where: { id: params.id, createdBy: user.id } });
+  const { id } = await params;
+  await prisma.project.deleteMany({ where: { id, createdBy: user.id } });
   return NextResponse.json({ ok: true });
 }
