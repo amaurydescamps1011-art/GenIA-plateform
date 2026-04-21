@@ -41,8 +41,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const todoTitle = TODO_BY_STATUS[body.status];
     if (todoTitle) {
       await prisma.todo.create({
+        data: { title: todoTitle, clientId: id, clientName: client.name, createdBy: user.id },
+      });
+    }
+    // Quand un client est terminé : auto-créer un post social + todo de publication
+    if (body.status === "termine") {
+      await prisma.socialPost.create({
         data: {
-          title: todoTitle,
+          title: "Poster le projet de " + client.name,
+          type: "client_project",
+          platform: "all",
+          status: "idee",
+          clientId: id,
+          clientName: client.name,
+          notes: "Projet termine - a publier sur les reseaux",
+          createdBy: user.id,
+        },
+      });
+      await prisma.todo.create({
+        data: {
+          title: "Publier le projet de " + client.name + " sur les reseaux sociaux",
           clientId: id,
           clientName: client.name,
           createdBy: user.id,

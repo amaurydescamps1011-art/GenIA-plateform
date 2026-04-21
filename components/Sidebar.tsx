@@ -10,6 +10,7 @@ const NAV = [
   { label: "SOP", href: "/dashboard/sop", icon: "◎" },
   { label: "Taches", href: "/dashboard/todos", icon: "✓" },
   { label: "Facturation", href: "/dashboard/invoices", icon: "◻" },
+  { label: "Social Media", href: "/dashboard/social", icon: "◈" },
   { label: "Compta", href: "/dashboard/compta", icon: "◑" },
   { label: "YouTube Audio", href: "/dashboard/youtube", icon: "▶" },
 ];

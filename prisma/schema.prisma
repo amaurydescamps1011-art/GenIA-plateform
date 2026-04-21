@@ -24,6 +24,7 @@ model User {
   sopSteps     SOPStepContent[]
   invoices     Invoice[]
   expenses     Expense[]
+  socialPosts  SocialPost[]
 }
 
 model Client {
@@ -144,4 +145,21 @@ model Expense {
   updatedAt DateTime @updatedAt
   createdBy String
   user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+model SocialPost {
+  id          String   @id @default(cuid())
+  title       String
+  type        String   @default("contenu")
+  platform    String   @default("all")
+  status      String   @default("idee")
+  scheduledAt String   @default("")
+  publishedAt String   @default("")
+  notes       String   @default("")
+  clientId    String   @default("")
+  clientName  String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
