@@ -70,7 +70,7 @@ export default function YoutubeClient({ user: _user }: { user: { id: string; nam
     if (!url) return; setSaveLoading(true);
     try {
       const res = await fetch("/api/youtube/download", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, title: videoInfo?.title || "" }),
       });
       const d = await res.json();
       if (!res.ok) { setToast(d.error || "Erreur"); return; }
