@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 
-interface VideoInfo { title: string; channel: string; duration: number; thumbnail: string | null; videoId: string; }
+interface VideoInfo { title: string; channel: string; duration: number | null; thumbnail: string | null; videoId: string; }
 interface Asset { id: string; name: string; url: string; fileSize: number; mimeType: string; tags: string; createdAt: string; user: { name: string | null; email: string }; }
 
 function formatDuration(s: number) {
@@ -12,7 +13,7 @@ function formatDuration(s: number) {
 }
 function formatSize(b: number) { return b < 1048576 ? (b/1024).toFixed(0)+" Ko" : (b/1048576).toFixed(1)+" Mo"; }
 
-export default function YoutubeClient({ user }: { user: { id: string; name?: string|null; email: string; role: string } }) {
+export default function YoutubeClient({ user: _user }: { user: { id: string; name?: string|null; email: string; role: string } }) {
   const [url, setUrl] = useState("");
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [fetchLoading, setFetchLoading] = useState(false);
@@ -77,7 +78,7 @@ export default function YoutubeClient({ user }: { user: { id: string; name?: str
     } catch { setToast("Erreur sauvegarde"); } finally { setSaveLoading(false); }
   }
 
-  const card: React.CSSProperties = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" };
+  const card: CSSProperties = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" };
 
   return (
     <div style={{ maxWidth: "800px" }}>
@@ -107,7 +108,7 @@ export default function YoutubeClient({ user }: { user: { id: string; name?: str
             <div style={{ flex: 1, minWidth: 0 }}>
               <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.25rem" }}>{videoInfo.title}</h3>
               <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>{videoInfo.channel}</p>
-              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Duree : {formatDuration(videoInfo.duration)}</p>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Duree : {videoInfo.duration != null ? formatDuration(videoInfo.duration) : "N/A"}</p>
             </div>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
