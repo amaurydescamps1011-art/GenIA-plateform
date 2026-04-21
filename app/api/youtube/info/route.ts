@@ -1,27 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
-import ytdl from "@distube/ytdl-core";
+
+function extractVideoId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("?")[0];
+    if (u.hostname.includes("youtube.com")) {
+      if (u.pathname === "/watch") return u.searchParams.get("v");
+      const m = u.pathname.match(//(shorts|embed|v)/([^/?]+)/);
+      if (m) return m[2];
+    }
+    return null;
+  } catch { return null; }
+}
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
 
   const url = req.nextUrl.searchParams.get("url") || "";
-  if (!ytdl.validateURL(url)) {
+  const videoId = extractVideoId(url);
+  if (!videoId) {
     return NextResponse.json({ error: "URL YouTube invalide" }, { status: 400 });
   }
 
   try {
-    const info = await ytdl.getInfo(url);
-    const { videoDetails } = info;
+    const oembedUrl = "https://www.youtube.com/oembed?url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId) + "&format=json";
+    const res = await fetch(oembedUrl);
+    if (!res.ok) {
+      return NextResponse.json({ error: "Video introuvable ou privee" }, { status: 404 });
+    }
+    const data = await res.json();
     return NextResponse.json({
-      title: videoDetails.title,
-      channel: videoDetails.author.name,
-      duration: parseInt(videoDetails.lengthSeconds),
-      thumbnail: videoDetails.thumbnails.at(-1)?.url ?? null,
-      videoId: videoDetails.videoId,
+      title: data.title,
+      channel: data.author_name,
+      duration: null,
+      thumbnail: "https://img.youtube.com/vi/" + videoId + "/maxresdefault.jpg",
+      videoId,
     });
   } catch {
-    return NextResponse.json({ error: "Impossible de récupérer les informations de la vidéo" }, { status: 500 });
+    return NextResponse.json({ error: "Impossible de recuperer les informations" }, { status: 500 });
   }
 }
