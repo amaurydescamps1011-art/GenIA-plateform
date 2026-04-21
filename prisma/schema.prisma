@@ -18,6 +18,22 @@ model User {
   createdAt DateTime  @default(now())
   assets    Asset[]
   sessions  Session[]
+  clients   Client[]
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  status      String   @default("prospect")
+  budget      Float?
+  notes       String   @default("")
+  tags        String   @default("")
+  contact     String   @default("")
+  driveUrl    String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
 
 model Session {
