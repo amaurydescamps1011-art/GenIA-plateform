@@ -88,7 +88,7 @@ export default function SOPClient() {
   }
 
   function addVideo(modId: string) {
-    const url = (videoInputs[modId]||).trim();
+    const url = (videoInputs[modId]||"").trim();
     if(!url) return;
     let embedUrl = url;
     try {
