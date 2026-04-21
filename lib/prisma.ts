@@ -1,18 +1,14 @@
 import { PrismaClient } from "@prisma/client";
-import Database from "better-sqlite3";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import path from "path";
+import { PrismaNeon } from "@prisma/adapter-neon";
 
-const dbPath = path.join(process.cwd(), "dev.db");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const globalForPrisma = globalThis as unknown as { prisma: any };
 
 function createPrismaClient() {
-  const url = "file:" + dbPath.replace(/\\/g, "/");
-  const adapter = new PrismaBetterSqlite3({ url });
-  return new PrismaClient({ adapter } as Parameters<typeof PrismaClient>[0]);
+  const adapter = new PrismaNeon({ connectionString: process.env.POSTGRES_PRISMA_URL! });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new (PrismaClient as any)({ adapter }) as PrismaClient;
 }
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
-
-export const prisma = globalForPrisma.prisma || createPrismaClient();
-
+export const prisma: PrismaClient = globalForPrisma.prisma || createPrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
