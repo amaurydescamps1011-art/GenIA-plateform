@@ -6,11 +6,6 @@ import type { CSSProperties } from "react";
 interface VideoInfo { title: string; channel: string; duration: number | null; thumbnail: string | null; videoId: string; }
 interface Asset { id: string; name: string; url: string; fileSize: number; mimeType: string; tags: string; createdAt: string; user: { name: string | null; email: string }; }
 
-function formatDuration(s: number) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  if (h > 0) return h + ":" + String(m).padStart(2,"0") + ":" + String(sec).padStart(2,"0");
-  return m + ":" + String(sec).padStart(2,"0");
-}
 function formatSize(b: number) { return b < 1048576 ? (b/1024).toFixed(0)+" Ko" : (b/1048576).toFixed(1)+" Mo"; }
 
 export default function YoutubeClient({ user: _user }: { user: { id: string; name?: string|null; email: string; role: string } }) {
@@ -18,17 +13,17 @@ export default function YoutubeClient({ user: _user }: { user: { id: string; nam
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [fetchLoading, setFetchLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const [downloadLoading, setDownloadLoading] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
   const [savedAssets, setSavedAssets] = useState<Asset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
+  const [uploadLoading, setUploadLoading] = useState(false);
   const [toast, setToast] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadSavedAssets(); }, []);
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(""), 3000);
+    const t = setTimeout(() => setToast(""), 3500);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -48,48 +43,41 @@ export default function YoutubeClient({ user: _user }: { user: { id: string; nam
       const d = await res.json();
       if (!res.ok) { setFetchError(d.error || "Erreur"); return; }
       setVideoInfo(d);
-    } catch { setFetchError("Erreur reseau"); } finally { setFetchLoading(false); }
+    } catch { setFetchError("Erreur reseau"); }
+    finally { setFetchLoading(false); }
   }
 
-  async function handleDownload() {
-    if (!url) return; setDownloadLoading(true);
-    try {
-      const res = await fetch("/api/youtube/download?url=" + encodeURIComponent(url));
-      if (!res.ok) { setToast("Echec du telechargement"); return; }
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition") || "";
-      const fnMatch = cd.match(/filename="([^"]+)"/);
-      const fn = fnMatch ? fnMatch[1] : (videoInfo?.title || "audio") + ".webm";
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = fn; a.click(); URL.revokeObjectURL(a.href);
-      setToast("Telechargement demarre !");
-    } catch { setToast("Erreur telechargement"); } finally { setDownloadLoading(false); }
+  function handleOpenCobalt() {
+    window.open("https://cobalt.tools/", "_blank");
+    navigator.clipboard.writeText(url).catch(() => {});
+    setToast("cobalt.tools ouvert - colle l URL et telecharge en MP3 !");
   }
-
-  async function handleSaveToAssets() {
-    if (!url) return; setSaveLoading(true);
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadLoading(true);
     try {
-      const res = await fetch("/api/youtube/download", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, title: videoInfo?.title || "" }),
-      });
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", videoInfo?.title || file.name.replace(/.[^.]+$/, ""));
+      formData.append("youtubeUrl", url);
+      const res = await fetch("/api/youtube/download", { method: "POST", body: formData });
       const d = await res.json();
-      if (!res.ok) { setToast(d.error || "Erreur"); return; }
-      setToast("Audio sauvegarde dans les Assets !"); setSavedAssets(p => [d, ...p]);
-    } catch { setToast("Erreur sauvegarde"); } finally { setSaveLoading(false); }
+      if (!res.ok) { setToast(d.error || "Erreur upload"); return; }
+      setSavedAssets(p => [d, ...p]);
+      setToast("Audio sauvegarde dans les Assets !");
+    } catch { setToast("Erreur upload"); }
+    finally { setUploadLoading(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
   }
 
   const card: CSSProperties = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" };
 
   return (
     <div style={{ maxWidth: "800px" }}>
-      {toast && (
-        <div style={{ position: "fixed", top: "1.5rem", right: "1.5rem", zIndex: 9999, background: "var(--accent)", color: "#fff", padding: "0.75rem 1.25rem", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
-          {toast}
-        </div>
-      )}
+      {toast && <div style={{ position: "fixed", top: "1.5rem", right: "1.5rem", zIndex: 9999, background: "var(--accent)", color: "#fff", padding: "0.75rem 1.25rem", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, boxShadow: "0 4px 20px rgba(0,0,0,0.3)", maxWidth: "320px" }}>{toast}</div>}
       <div style={{ marginBottom: "2rem" }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.25rem" }}>YouTube vers Audio</h1>
-        <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>Telechargez l audio ou sauvegardez-le dans vos Assets.</p>
+        <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>Recuperez les infos, telechargez via cobalt.tools, puis importez dans vos Assets.</p>
       </div>
       <div style={{ ...card, padding: "1.5rem", marginBottom: "1.5rem" }}>
         <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>URL YouTube</label>
@@ -102,29 +90,34 @@ export default function YoutubeClient({ user: _user }: { user: { id: string; nam
       {videoInfo && (
         <div style={{ ...card, overflow: "hidden", marginBottom: "1.5rem" }}>
           <div style={{ display: "flex", gap: "1rem", padding: "1.25rem" }}>
-            {videoInfo.thumbnail && (
-              <img src={videoInfo.thumbnail} alt={videoInfo.title} style={{ width: "160px", height: "90px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />
-            )}
+            {videoInfo.thumbnail && <img src={videoInfo.thumbnail} alt={videoInfo.title} style={{ width: "160px", height: "90px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />}
             <div style={{ flex: 1, minWidth: 0 }}>
               <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.25rem" }}>{videoInfo.title}</h3>
-              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>{videoInfo.channel}</p>
-              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Duree : {videoInfo.duration != null ? formatDuration(videoInfo.duration) : "N/A"}</p>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{videoInfo.channel}</p>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "0.75rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-            <button onClick={handleDownload} disabled={downloadLoading || saveLoading} className="genia-btn">{downloadLoading ? "Telechargement..." : "Telecharger"}</button>
-            <button onClick={handleSaveToAssets} disabled={saveLoading || downloadLoading} className="genia-btn genia-btn-ghost">{saveLoading ? "Sauvegarde..." : "Sauvegarder dans les Assets"}</button>
+          <div style={{ padding: "1rem 1.25rem", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+              <button onClick={handleOpenCobalt} className="genia-btn" style={{ whiteSpace: "nowrap" }}>Etape 1 - Telecharger via cobalt.tools</button>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Ouvre cobalt.tools et copie l URL dans le presse-papier</span>
+            </div>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploadLoading} className="genia-btn genia-btn-ghost" style={{ whiteSpace: "nowrap" }}>
+                {uploadLoading ? "Sauvegarde..." : "Etape 2 - Importer dans les Assets"}
+              </button>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Selectionne le fichier audio telecharge</span>
+              <input ref={fileInputRef} type="file" accept="audio/*" style={{ display: "none" }} onChange={handleFileUpload} />
+            </div>
           </div>
         </div>
       )}
       <div>
-        <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "1rem" }}>Audios sauvegardes ({savedAssets.length})</h2>
-        {assetsLoading ? (
-          <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>Chargement...</p>
-        ) : savedAssets.length === 0 ? (
+        <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "1rem" }}>Audios importes ({savedAssets.length})</h2>
+        {assetsLoading ? <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>Chargement...</p>
+        : savedAssets.length === 0 ? (
           <div style={{ ...card, padding: "2rem", textAlign: "center" }}>
             <p style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>&#9835;</p>
-            <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>Aucun audio YouTube sauvegarde.</p>
+            <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>Aucun audio YouTube importe pour l instant.</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
