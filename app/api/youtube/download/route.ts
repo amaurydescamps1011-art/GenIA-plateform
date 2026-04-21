@@ -4,25 +4,30 @@ import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
+const COBALT_API = "https://api.cobalt.tools/";
+
 async function getCobaltUrl(youtubeUrl: string): Promise<{ url: string; filename: string }> {
-  const res = await fetch("https://api.cobalt.tools/", {
+  const res = await fetch(COBALT_API, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
     body: JSON.stringify({
       url: youtubeUrl,
       downloadMode: "audio",
       audioFormat: "mp3",
-      filenameStyle: "basic",
     }),
   });
-  if (!res.ok) throw new Error("cobalt API error: " + res.status);
   const data = await res.json();
-  if (data.status === "error") throw new Error(data.error?.code || "cobalt error");
-  if (!data.url) throw new Error("No URL returned by cobalt");
+  if (!res.ok || data.status === "error") {
+    const detail = JSON.stringify(data);
+    throw new Error("cobalt " + res.status + ": " + detail);
+  }
+  if (!data.url) throw new Error("No URL in cobalt response: " + JSON.stringify(data));
   return { url: data.url, filename: data.filename || "audio.mp3" };
 }
 
-// GET: redirect client to cobalt download URL
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
@@ -31,15 +36,14 @@ export async function GET(req: NextRequest) {
   if (!url) return NextResponse.json({ error: "URL manquante" }, { status: 400 });
 
   try {
-    const { url: dlUrl, filename } = await getCobaltUrl(url);
-    return NextResponse.redirect(dlUrl, { headers: { "Content-Disposition": "attachment; filename=" + filename } });
+    const { url: dlUrl } = await getCobaltUrl(url);
+    return NextResponse.redirect(dlUrl);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erreur inconnue";
-    return NextResponse.json({ error: "Echec du telechargement: " + msg }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
-// POST: download audio server-side and save to assets
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
@@ -51,7 +55,7 @@ export async function POST(req: NextRequest) {
     const { url: dlUrl, filename } = await getCobaltUrl(url);
 
     const audioRes = await fetch(dlUrl);
-    if (!audioRes.ok) throw new Error("Echec fetch audio");
+    if (!audioRes.ok) throw new Error("Fetch audio echoue: " + audioRes.status);
     const buffer = Buffer.from(await audioRes.arrayBuffer());
 
     const ext = filename.split(".").pop() || "mp3";
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
     await writeFile(path.join(uploadDir, safeName), buffer);
 
     const mimeType = ext === "mp3" ? "audio/mpeg" : "audio/" + ext;
-    const assetName = title || filename.replace(/.[^.]+$/, "");
+    const assetName = (title as string) || filename.replace(/.[^.]+$/, "");
 
     const asset = await prisma.asset.create({
       data: {
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(asset);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erreur inconnue";
-    return NextResponse.json({ error: "Echec de la sauvegarde: " + msg }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
