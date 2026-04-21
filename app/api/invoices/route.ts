@@ -9,6 +9,13 @@ async function nextNumber(userId: string, type: string) {
   return prefix + "-" + year + "-" + String(count + 1).padStart(3, "0");
 }
 
+const CRM_STATUS_ON_CREATE: Record<string, string> = {
+  devis: "verbal",
+  acompte: "acompte",
+  facture: "en_cours",
+};
+const PIPELINE = ["prospect", "verbal", "acompte", "en_cours", "termine", "followup"];
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
@@ -22,12 +29,34 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const number = body.number || await nextNumber(user.id, body.type);
   const issueDate = body.issueDate || new Date().toISOString().split("T")[0];
-  const items = JSON.stringify(body.items || []);
-  const subtotal = (body.items||[]).reduce((s:number,i:any)=>s+(i.qty*i.unitPrice),0);
+  const items = typeof body.items === "string" ? body.items : JSON.stringify(body.items || []);
+  const parsedItems: Array<{ qty: number; unitPrice: number }> = JSON.parse(items);
+  const subtotal = parsedItems.reduce((s, i) => s + i.qty * i.unitPrice, 0);
   const taxAmount = Math.round(subtotal * (body.taxRate || 20) / 100 * 100) / 100;
   const total = Math.round((subtotal + taxAmount) * 100) / 100;
+
   const inv = await prisma.invoice.create({
-    data: { type: body.type, number, status: body.status || "brouillon", clientId: body.clientId || "", clientName: body.clientName || "", clientEmail: body.clientEmail || "", clientAddress: body.clientAddress || "", items, subtotal, taxRate: body.taxRate || 20, taxAmount, total, notes: body.notes || "", validUntil: body.validUntil || "", dueDate: body.dueDate || "", issueDate, parentId: body.parentId || "", createdBy: user.id },
+    data: {
+      type: body.type, number, status: body.status || "brouillon",
+      clientId: body.clientId || "", clientName: body.clientName || "",
+      clientEmail: body.clientEmail || "", clientAddress: body.clientAddress || "",
+      items, subtotal, taxRate: body.taxRate || 20, taxAmount, total,
+      notes: body.notes || "", validUntil: body.validUntil || "",
+      dueDate: body.dueDate || "", issueDate, parentId: body.parentId || "",
+      createdBy: user.id,
+    },
   });
+
+  // Automation CRM : avancer le statut du client selon le type de document créé
+  if (body.clientId) {
+    const targetStatus = CRM_STATUS_ON_CREATE[body.type];
+    if (targetStatus) {
+      const client = await prisma.client.findFirst({ where: { id: body.clientId, createdBy: user.id } });
+      if (client && PIPELINE.indexOf(targetStatus) > PIPELINE.indexOf(client.status)) {
+        await prisma.client.update({ where: { id: body.clientId }, data: { status: targetStatus } });
+      }
+    }
+  }
+
   return NextResponse.json(inv);
 }

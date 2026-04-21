@@ -244,7 +244,7 @@ function InvoiceEditor({ initial, clients, onSave, onClose }: { initial: Partial
 }
 
 // ─── Invoice List ─────────────────────────────────────────────────────────
-function InvoiceList({ invoices, onView, onEdit, onDelete, onConvert }: { invoices: Invoice[]; onView: (inv: Invoice) => void; onEdit: (inv: Invoice) => void; onDelete: (id: string) => void; onConvert: (inv: Invoice) => void }) {
+function InvoiceList({ invoices, onView, onEdit, onDelete, onConvert, onMarkPaid }: { invoices: Invoice[]; onView: (inv: Invoice) => void; onEdit: (inv: Invoice) => void; onDelete: (id: string) => void; onConvert: (inv: Invoice) => void; onMarkPaid: (inv: Invoice) => void }) {
   const [tab, setTab] = useState<"devis" | "acompte" | "facture">("devis");
   const filtered = invoices.filter(i => i.type === tab);
   const tabs: Array<"devis" | "acompte" | "facture"> = ["devis", "acompte", "facture"];
@@ -267,9 +267,10 @@ function InvoiceList({ invoices, onView, onEdit, onDelete, onConvert }: { invoic
         {filtered.map(inv => {
           const color = TYPE_COLORS[inv.type] || "#6b7280";
           const sColor = STATUS_COLORS[inv.status] || "#6b7280";
-          const canConvert = (inv.type === "devis" && inv.status !== "perdu") || inv.type === "acompte";
+          const canConvert = (inv.type === "devis" && !["refuse", "annule"].includes(inv.status)) || inv.type === "acompte";
+          const canPay = ["acompte", "facture"].includes(inv.type) && inv.status !== "paye" && inv.status !== "annule";
           return (
-            <div key={inv.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "0.875rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div key={inv.id} style={{ background: "var(--surface)", border: inv.status === "paye" ? "1px solid #22c55e44" : "1px solid var(--border)", borderRadius: "10px", padding: "0.875rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
               <div style={{ width: "4px", height: "40px", borderRadius: "2px", background: color, flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.125rem" }}>
@@ -278,10 +279,15 @@ function InvoiceList({ invoices, onView, onEdit, onDelete, onConvert }: { invoic
                 </div>
                 <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{inv.clientName || "Sans client"} &middot; {fmt(inv.total)} TTC &middot; {fmtDate(inv.issueDate)}</div>
               </div>
-              <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0, flexWrap: "wrap" as const, justifyContent: "flex-end" }}>
                 <button onClick={() => onView(inv)} className="genia-btn-ghost" style={{ fontSize: "0.78rem", padding: "0.3rem 0.625rem" }}>Voir</button>
                 <button onClick={() => onEdit(inv)} className="genia-btn-ghost" style={{ fontSize: "0.78rem", padding: "0.3rem 0.625rem" }}>Editer</button>
-                {canConvert && (
+                {canPay && (
+                  <button onClick={() => onMarkPaid(inv)} className="genia-btn" style={{ fontSize: "0.78rem", padding: "0.3rem 0.625rem", background: "#22c55e", borderColor: "#22c55e" }}>
+                    ✓ Paye
+                  </button>
+                )}
+                {canConvert && inv.status !== "paye" && (
                   <button onClick={() => onConvert(inv)} className="genia-btn" style={{ fontSize: "0.78rem", padding: "0.3rem 0.625rem", background: color, borderColor: color }}>
                     {inv.type === "devis" ? "→ Acompte" : "→ Facture"}
                   </button>
@@ -338,6 +344,12 @@ export default function InvoicesClient() {
     fetchAll();
   }
 
+  async function handleMarkPaid(inv: Invoice) {
+    if (!confirm("Marquer " + inv.number + " comme paye ? Cela mettra aussi le client en Termine si applicable.")) return;
+    await fetch("/api/invoices/" + inv.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paye" }) });
+    fetchAll();
+  }
+
   async function handleConvert(inv: Invoice) {
     const targetType = inv.type === "devis" ? "acompte" : "facture";
     const label = inv.type === "devis" ? "acompte (50%)" : "facture finale";
@@ -379,7 +391,7 @@ export default function InvoicesClient() {
           </div>
         ))}
       </div>
-      <InvoiceList invoices={invoices} onView={inv => setViewing(inv)} onEdit={inv => setEditing(inv)} onDelete={handleDelete} onConvert={handleConvert} />
+      <InvoiceList invoices={invoices} onView={inv => setViewing(inv)} onEdit={inv => setEditing(inv)} onDelete={handleDelete} onConvert={handleConvert} onMarkPaid={handleMarkPaid} />
       {(creating || editing) && (
         <InvoiceEditor
           initial={editing ? { ...editing, items: parseItems(editing.items) } : (creating || {})}
