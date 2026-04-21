@@ -4,16 +4,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
-  { label: "Dashboard", href: "/dashboard", icon: "⊞" },
-  { label: "Assets", href: "/dashboard/assets", icon: "◈" },
-  { label: "CRM", href: "/dashboard/crm", icon: "◉" },
-  { label: "SOP", href: "/dashboard/sop", icon: "◎" },
-  { label: "Taches", href: "/dashboard/todos", icon: "✓" },
-  { label: "Facturation", href: "/dashboard/invoices", icon: "◻" },
-  { label: "Portfolio", href: "/dashboard/portfolio", icon: "◫" },
-  { label: "Social Media", href: "/dashboard/social", icon: "◈" },
-  { label: "Compta", href: "/dashboard/compta", icon: "◑" },
-  { label: "YouTube Audio", href: "/dashboard/youtube", icon: "▶" },
+  { label: "Dashboard",    href: "/dashboard",          icon: "⊞", adminOnly: true },
+  { label: "Assets",       href: "/dashboard/assets",   icon: "◈" },
+  { label: "CRM",          href: "/dashboard/crm",      icon: "◉" },
+  { label: "SOP",          href: "/dashboard/sop",      icon: "◎" },
+  { label: "Taches",       href: "/dashboard/todos",    icon: "✓" },
+  { label: "Facturation",  href: "/dashboard/invoices", icon: "◻", adminOnly: true },
+  { label: "Portfolio",    href: "/dashboard/portfolio",icon: "◫" },
+  { label: "Social Media", href: "/dashboard/social",   icon: "◈" },
+  { label: "Compta",       href: "/dashboard/compta",   icon: "◑", adminOnly: true },
+  { label: "YouTube Audio",href: "/dashboard/youtube",  icon: "▶" },
 ];
 
 export default function Sidebar({ user }: { user: { name?: string | null; email: string; role: string } }) {
@@ -46,7 +46,7 @@ export default function Sidebar({ user }: { user: { name?: string | null; email:
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: "1rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        {NAV.map(item => {
+        {NAV.filter(item => !item.adminOnly || user.role === "admin").map(item => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
           return (
             <Link key={item.href} href={item.href} style={{

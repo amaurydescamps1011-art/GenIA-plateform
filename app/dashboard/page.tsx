@@ -1,10 +1,12 @@
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  const uid = user!.id;
+  if (!user || user.role !== "admin") redirect("/dashboard/crm");
+  const uid = user.id;
 
   const [clientCount, todoCount, clientsByStatus, invoices, expenses] = await Promise.all([
     prisma.client.count({ where: { createdBy: uid } }),

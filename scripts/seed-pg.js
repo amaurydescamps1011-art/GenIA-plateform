@@ -6,13 +6,22 @@ const bcrypt = require("bcryptjs");
 async function main() {
   const adapter = new PrismaNeon({ connectionString: process.env.POSTGRES_PRISMA_URL });
   const prisma = new PrismaClient({ adapter });
-  const hash = await bcrypt.hash("genia2024", 12);
-  const user = await prisma.user.upsert({
-    where: { email: "amaury@genia.studio" },
-    update: {},
-    create: { name: "Amaury", email: "amaury@genia.studio", password: hash, role: "admin" },
-  });
-  console.log("Admin créé :", user.email, "| mot de passe : genia2024");
+
+  const users = [
+    { name: "Amaury", email: "amaury@genia.internal", password: "123", role: "admin" },
+    { name: "Fabien", email: "fabien@genia.internal", password: "fabien", role: "user" },
+  ];
+
+  for (const u of users) {
+    const hash = await bcrypt.hash(u.password, 12);
+    const created = await prisma.user.upsert({
+      where: { email: u.email },
+      update: { name: u.name, password: hash, role: u.role },
+      create: { name: u.name, email: u.email, password: hash, role: u.role },
+    });
+    console.log("Utilisateur:", created.name);
+  }
+
   await prisma.$disconnect();
 }
 
