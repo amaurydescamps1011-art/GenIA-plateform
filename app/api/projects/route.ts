@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
-  const user = await getSession(req);
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clientId = req.nextUrl.searchParams.get("clientId");
@@ -32,7 +32,7 @@ const DEFAULT_CHECKLIST = JSON.stringify([
 ]);
 
 export async function POST(req: NextRequest) {
-  const user = await getSession(req);
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
