@@ -6,9 +6,13 @@ function extractVideoId(url: string): string | null {
     const u = new URL(url);
     if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("?")[0];
     if (u.hostname.includes("youtube.com")) {
-      if (u.pathname === "/watch") return u.searchParams.get("v");
-      const m = u.pathname.match(//(shorts|embed|v)/([^/?]+)/);
-      if (m) return m[2];
+      const v = u.searchParams.get("v");
+      if (v) return v;
+      const parts = u.pathname.split("/").filter(Boolean);
+      const keywords = ["shorts", "embed", "v"];
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (keywords.includes(parts[i])) return parts[i + 1];
+      }
     }
     return null;
   } catch { return null; }
