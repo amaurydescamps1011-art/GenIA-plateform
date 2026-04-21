@@ -22,6 +22,7 @@ model User {
   todos        Todo[]
   sopContents   SOPContent[]
   sopSteps     SOPStepContent[]
+  invoices     Invoice[]
 }
 
 model Client {
@@ -99,4 +100,29 @@ model SOPStepContent {
   user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@unique([stepId, createdBy])
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  type          String
+  number        String
+  status        String   @default("brouillon")
+  clientId      String   @default("")
+  clientName    String   @default("")
+  clientEmail   String   @default("")
+  clientAddress String   @default("")
+  items         String   @default("[]")
+  subtotal      Float    @default(0)
+  taxRate       Float    @default(20)
+  taxAmount     Float    @default(0)
+  total         Float    @default(0)
+  notes         String   @default("")
+  validUntil    String   @default("")
+  dueDate       String   @default("")
+  issueDate     String   @default("")
+  parentId      String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String
+  user          User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
