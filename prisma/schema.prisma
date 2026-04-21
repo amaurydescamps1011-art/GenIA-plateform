@@ -19,7 +19,8 @@ model User {
   assets    Asset[]
   sessions  Session[]
   clients   Client[]
-  todos     Todo[]
+  todos        Todo[]
+  sopContents SOPContent[]
 }
 
 model Client {
@@ -73,4 +74,15 @@ model Todo {
   createdAt   DateTime @default(now())
   createdBy   String
   user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+model SOPContent {
+  id        String   @id @default(cuid())
+  moduleId  String
+  content   String   @default("")
+  updatedAt DateTime @updatedAt
+  createdBy String
+  user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, createdBy])
 }
