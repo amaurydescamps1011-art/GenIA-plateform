@@ -17,11 +17,11 @@ type Client = {
 
 const COLUMNS: { key: string; label: string; color: string }[] = [
   { key: "prospect", label: "Prospect", color: "#eab308" },
-  { key: "appel", label: "Appel effectué", color: "#3b82f6" },
   { key: "verbal", label: "Confirmation verbale", color: "#f97316" },
   { key: "acompte", label: "Acompte payé", color: "#22c55e" },
   { key: "en_cours", label: "En cours", color: "#6366f1" },
   { key: "termine", label: "Terminé", color: "#16a34a" },
+  { key: "followup", label: "Follow-up", color: "#8b5cf6" },
   { key: "perdu", label: "Perdu", color: "#ef4444" },
 ];
 

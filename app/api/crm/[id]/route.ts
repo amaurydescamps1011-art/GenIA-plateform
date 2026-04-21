@@ -2,23 +2,51 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
+const TODO_BY_STATUS: Record<string, string> = {
+  prospect: "Confirmer verbalement le projet avec le client",
+  verbal: "Envoyer le devis et faire signer le contrat",
+  acompte: "Lancer la production",
+  en_cours: "Envoyer une mise a jour d avancement",
+  termine: "Demander un temoignage ou avis client",
+  followup: "Proposer un nouveau projet ou un upsell",
+};
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
   const { id } = await params;
   const body = await req.json();
-  const client = await prisma.client.updateMany({
-    where: { id, createdBy: user.id },
+
+  const existing = await prisma.client.findFirst({ where: { id, createdBy: user.id } });
+  if (!existing) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+
+  const client = await prisma.client.update({
+    where: { id },
     data: {
       ...(body.name !== undefined && { name: body.name }),
       ...(body.status !== undefined && { status: body.status }),
-      ...(body.budget !== undefined && { budget: body.budget ? parseFloat(body.budget) : null }),
+      ...(body.budget !== undefined && { budget: body.budget !== null ? parseFloat(body.budget) : null }),
       ...(body.notes !== undefined && { notes: body.notes }),
       ...(body.tags !== undefined && { tags: body.tags }),
       ...(body.contact !== undefined && { contact: body.contact }),
       ...(body.driveUrl !== undefined && { driveUrl: body.driveUrl }),
     },
   });
+
+  if (body.status && body.status !== existing.status) {
+    const todoTitle = TODO_BY_STATUS[body.status];
+    if (todoTitle) {
+      await prisma.todo.create({
+        data: {
+          title: todoTitle,
+          clientId: id,
+          clientName: client.name,
+          createdBy: user.id,
+        },
+      });
+    }
+  }
+
   return NextResponse.json(client);
 }
 

@@ -19,6 +19,7 @@ model User {
   assets    Asset[]
   sessions  Session[]
   clients   Client[]
+  todos     Todo[]
 }
 
 model Client {
@@ -61,4 +62,15 @@ model Asset {
   user        User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Todo {
+  id          String   @id @default(cuid())
+  title       String
+  done        Boolean  @default(false)
+  clientId    String?
+  clientName  String   @default("")
+  createdAt   DateTime @default(now())
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
