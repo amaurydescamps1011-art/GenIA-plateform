@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 const NAV = [
   { label: "Dashboard", href: "/dashboard", icon: "⊞" },
   { label: "Assets", href: "/dashboard/assets", icon: "◈" },
+  { label: "YouTube Audio", href: "/dashboard/youtube", icon: "▶" },
 ];
 
 export default function Sidebar({ user }: { user: { name?: string | null; email: string; role: string } }) {
