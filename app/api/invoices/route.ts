@@ -19,6 +19,7 @@ const PIPELINE = ["prospect", "verbal", "acompte", "en_cours", "termine", "follo
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const invoices = await prisma.invoice.findMany({ where: { createdBy: user.id }, orderBy: { createdAt: "desc" } });
   return NextResponse.json(invoices);
 }
@@ -26,6 +27,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const body = await req.json();
   const number = body.number || await nextNumber(user.id, body.type);
   const issueDate = body.issueDate || new Date().toISOString().split("T")[0];
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (body.clientId) {
     const targetStatus = CRM_STATUS_ON_CREATE[body.type];
     if (targetStatus) {
-      const client = await prisma.client.findFirst({ where: { id: body.clientId, createdBy: user.id } });
+      const client = await prisma.client.findFirst({ where: { id: body.clientId } });
       if (client && PIPELINE.indexOf(targetStatus) > PIPELINE.indexOf(client.status)) {
         await prisma.client.update({ where: { id: body.clientId }, data: { status: targetStatus } });
       }

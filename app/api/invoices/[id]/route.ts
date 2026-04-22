@@ -7,6 +7,7 @@ const PIPELINE = ["prospect", "verbal", "acompte", "en_cours", "termine", "follo
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const { id } = await params;
   const inv = await prisma.invoice.findFirst({ where: { id, createdBy: user.id } });
   if (!inv) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
@@ -16,6 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const { id } = await params;
   const body = await req.json();
   const items = body.items !== undefined ? (typeof body.items === "string" ? body.items : JSON.stringify(body.items)) : undefined;
@@ -49,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Automation CRM : facture payée → client "termine"
   if (body.status === "paye" && existing.clientId) {
-    const client = await prisma.client.findFirst({ where: { id: existing.clientId, createdBy: user.id } });
+    const client = await prisma.client.findFirst({ where: { id: existing.clientId } });
     if (client && PIPELINE.indexOf("termine") > PIPELINE.indexOf(client.status)) {
       await prisma.client.update({ where: { id: existing.clientId }, data: { status: "termine" } });
     }
@@ -61,6 +63,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const { id } = await params;
   await prisma.invoice.deleteMany({ where: { id, createdBy: user.id } });
   return NextResponse.json({ ok: true });

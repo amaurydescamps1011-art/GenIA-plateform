@@ -6,7 +6,6 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
   const todos = await prisma.todo.findMany({
-    where: { createdBy: user.id },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(todos);

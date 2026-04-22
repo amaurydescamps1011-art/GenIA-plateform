@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
   const project = await prisma.project.updateMany({
-    where: { id, createdBy: user.id },
+    where: { id },
     data: {
       ...(body.title !== undefined && { title: body.title }),
       ...(body.status !== undefined && { status: body.status }),
@@ -28,6 +28,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  await prisma.project.deleteMany({ where: { id, createdBy: user.id } });
+  await prisma.project.deleteMany({ where: { id } });
   return NextResponse.json({ ok: true });
 }

@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
   await prisma.portfolio.updateMany({
-    where: { id, createdBy: user.id },
+    where: { id },
     data: {
       ...(body.title !== undefined && { title: body.title }),
       ...(body.description !== undefined && { description: body.description }),
@@ -28,6 +28,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
   const { id } = await params;
-  await prisma.portfolio.deleteMany({ where: { id, createdBy: user.id } });
+  await prisma.portfolio.deleteMany({ where: { id } });
   return NextResponse.json({ ok: true });
 }

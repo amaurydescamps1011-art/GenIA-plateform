@@ -6,7 +6,6 @@ export async function GET(_req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
   const clients = await prisma.client.findMany({
-    where: { createdBy: user.id },
     orderBy: { updatedAt: "desc" },
   });
   return NextResponse.json(clients);

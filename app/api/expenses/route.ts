@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const expenses = await prisma.expense.findMany({
     where: { createdBy: user.id },
     orderBy: { date: "desc" },
@@ -15,6 +16,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   const body = await req.json();
   const expense = await prisma.expense.create({
     data: {

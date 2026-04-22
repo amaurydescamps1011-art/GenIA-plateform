@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
-  const existing = await prisma.client.findFirst({ where: { id, createdBy: user.id } });
+  const existing = await prisma.client.findFirst({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
 
   const client = await prisma.client.update({
@@ -76,6 +76,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
   const { id } = await params;
-  await prisma.client.deleteMany({ where: { id, createdBy: user.id } });
+  await prisma.client.deleteMany({ where: { id } });
   return NextResponse.json({ ok: true });
 }
