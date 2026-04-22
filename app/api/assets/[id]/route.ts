@@ -15,7 +15,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data: {
       ...(body.clientId !== undefined && { clientId: body.clientId }),
       ...(body.projectId !== undefined && { projectId: body.projectId }),
-      ...(body.clientName !== undefined && { clientId: body.clientId ?? undefined }),
     },
     include: { user: { select: { name: true, email: true } } },
   });

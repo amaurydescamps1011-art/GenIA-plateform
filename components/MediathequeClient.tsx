@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
-const FILE_TYPES = ["all", "image", "video", "audio", "pdf", "font", "archive", "other"];
+const TYPES = [
+  { key: "image", label: "Image", icon: "🖼" },
+  { key: "video", label: "Vidéo", icon: "🎬" },
+  { key: "audio", label: "Audio", icon: "🎵" },
+  { key: "pdf", label: "PDF / Doc", icon: "📄" },
+  { key: "font", label: "Police", icon: "🔤" },
+  { key: "archive", label: "Archive", icon: "📦" },
+  { key: "other", label: "Autre", icon: "📎" },
+];
 
 type Asset = {
   id: string;
   name: string;
   description: string;
   fileType: string;
-  fileSize: number;
-  mimeType: string;
   category: string;
   url: string;
   clientId: string;
@@ -23,15 +29,23 @@ type Client = { id: string; name: string };
 type Project = { id: string; title: string; clientId: string };
 type User = { id: string; name?: string | null; email: string; role: string };
 
-function formatSize(bytes: number) {
-  if (bytes < 1024) return bytes + " o";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " Ko";
-  return (bytes / (1024 * 1024)).toFixed(1) + " Mo";
+function driveFileId(url: string): string | null {
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) ?? url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
 }
 
-function fileIcon(type: string) {
-  const icons: Record<string, string> = { image: "🖼", video: "🎬", audio: "🎵", pdf: "📄", font: "🔤", archive: "📦", other: "📎" };
-  return icons[type] || "📎";
+function driveThumbnail(url: string): string | null {
+  const id = driveFileId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : null;
+}
+
+function driveViewUrl(url: string): string {
+  const id = driveFileId(url);
+  return id ? `https://drive.google.com/file/d/${id}/view` : url;
+}
+
+function typeIcon(type: string) {
+  return TYPES.find(t => t.key === type)?.icon ?? "📎";
 }
 
 export default function MediathequeClient({ currentUser }: { currentUser: User }) {
@@ -39,27 +53,27 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState("");
-  const [fileType, setFileType] = useState("all");
+  const [filterType, setFilterType] = useState("all");
   const [filterClient, setFilterClient] = useState("");
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [copied, setCopied] = useState(false);
-  const [linking, setLinking] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ name: "", description: "", category: "image" });
+
+  const [form, setForm] = useState({ name: "", url: "", category: "image", description: "" });
+  const [formError, setFormError] = useState("");
 
   const fetchAssets = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ shared: "true" });
     if (search) params.set("q", search);
-    if (fileType !== "all") params.set("category", fileType);
+    if (filterType !== "all") params.set("category", filterType);
     if (filterClient) params.set("clientId", filterClient);
     const res = await fetch(`/api/assets?${params}`);
     const data = await res.json();
     setAssets(Array.isArray(data) ? data : []);
     setLoading(false);
-  }, [search, fileType, filterClient]);
+  }, [search, filterType, filterClient]);
 
   useEffect(() => {
     const t = setTimeout(fetchAssets, 300);
@@ -67,41 +81,31 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
   }, [fetchAssets]);
 
   useEffect(() => {
-    fetch("/api/crm").then(r => r.ok ? r.json() : []).then((data: Client[]) => setClients(Array.isArray(data) ? data : []));
-    fetch("/api/projects").then(r => r.ok ? r.json() : []).then((data: Project[]) => setProjects(Array.isArray(data) ? data : []));
+    fetch("/api/crm").then(r => r.ok ? r.json() : []).then((d: Client[]) => setClients(Array.isArray(d) ? d : []));
+    fetch("/api/projects").then(r => r.ok ? r.json() : []).then((d: Project[]) => setProjects(Array.isArray(d) ? d : []));
   }, []);
 
-  async function handleUpload(e: React.FormEvent) {
+  async function addAsset(e: React.FormEvent) {
     e.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("name", form.name || file.name.replace(/\.[^.]+$/, ""));
-    fd.append("description", form.description);
-    fd.append("category", form.category);
-    fd.append("clientId", "");
-    fd.append("projectId", "");
-    const res = await fetch("/api/assets", { method: "POST", body: fd });
+    setFormError("");
+    if (!form.name.trim() || !form.url.trim()) { setFormError("Nom et lien requis"); return; }
+    if (!form.url.startsWith("http")) { setFormError("Lien invalide"); return; }
+    setSaving(true);
+    const res = await fetch("/api/assets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.name.trim(), url: form.url.trim(), category: form.category, description: form.description }),
+    });
     if (res.ok) {
       const a = await res.json();
       setAssets(prev => [a, ...prev]);
-      setForm({ name: "", description: "", category: "image" });
-      if (fileRef.current) fileRef.current.value = "";
+      setForm({ name: "", url: "", category: "image", description: "" });
     }
-    setUploading(false);
-  }
-
-  async function deleteAsset(id: string) {
-    await fetch("/api/assets/" + id, { method: "DELETE" });
-    setAssets(prev => prev.filter(a => a.id !== id));
-    if (selected?.id === id) setSelected(null);
+    setSaving(false);
   }
 
   async function linkAsset(clientId: string, projectId: string) {
     if (!selected) return;
-    setLinking(true);
     const res = await fetch("/api/assets/" + selected.id, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -112,64 +116,77 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
       setSelected(updated);
       setAssets(prev => prev.map(a => a.id === updated.id ? updated : a));
     }
-    setLinking(false);
   }
 
-  function copyUrl(url: string) {
-    navigator.clipboard.writeText(window.location.origin + url);
+  async function deleteAsset(id: string) {
+    await fetch("/api/assets/" + id, { method: "DELETE" });
+    setAssets(prev => prev.filter(a => a.id !== id));
+    if (selected?.id === id) setSelected(null);
+  }
+
+  function copyLink(url: string) {
+    navigator.clipboard.writeText(driveViewUrl(url));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
 
-  const selectedClientProjects = selected
-    ? projects.filter(p => p.clientId === (selected.clientId || ""))
-    : [];
-
-  const allClientProjects = selected?.clientId
+  const clientProjects = selected?.clientId
     ? projects.filter(p => p.clientId === selected.clientId)
     : [];
 
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* Left panel */}
+      {/* Main */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {/* Toolbar */}
-        <div style={{ padding: "1rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", flexShrink: 0 }}>
-          <input className="genia-input" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
-            style={{ flex: 1, minWidth: "140px", maxWidth: "220px" }} />
-          <select className="genia-input" value={filterClient} onChange={e => setFilterClient(e.target.value)}
-            style={{ width: "160px" }}>
+
+        {/* Add form */}
+        <div style={{ padding: "1rem 1.5rem", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
+          <p style={{ margin: "0 0 0.75rem", fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Ajouter un média via Google Drive
+          </p>
+          <form onSubmit={addAsset} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <label style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Nom</label>
+              <input className="genia-input" placeholder="Logo client, charte..." value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ width: "180px" }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <label style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Lien Drive partageable</label>
+              <input className="genia-input" placeholder="https://drive.google.com/file/d/..." value={form.url}
+                onChange={e => setForm(f => ({ ...f, url: e.target.value }))} style={{ width: "320px" }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <label style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Type</label>
+              <select className="genia-input" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={{ width: "120px" }}>
+                {TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
+              </select>
+            </div>
+            <button className="genia-btn" type="submit" disabled={saving} style={{ alignSelf: "flex-end" }}>
+              {saving ? "..." : "Ajouter"}
+            </button>
+            {formError && <p style={{ margin: 0, fontSize: "0.78rem", color: "#ef4444", alignSelf: "center" }}>{formError}</p>}
+          </form>
+          <p style={{ margin: "0.6rem 0 0", fontSize: "0.7rem", color: "var(--text-muted)" }}>
+            Dans Drive → clic droit → Partager → "Toute personne ayant le lien" → Copier le lien
+          </p>
+        </div>
+
+        {/* Filters */}
+        <div style={{ padding: "0.75rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.625rem", flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
+          <input className="genia-input" placeholder="Rechercher..." value={search}
+            onChange={e => setSearch(e.target.value)} style={{ width: "180px" }} />
+          <select className="genia-input" value={filterClient} onChange={e => setFilterClient(e.target.value)} style={{ width: "160px" }}>
             <option value="">Tous les clients</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-            {FILE_TYPES.map(t => (
-              <button key={t} onClick={() => setFileType(t)}
-                style={{ padding: "0.25rem 0.6rem", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", border: "1px solid " + (fileType === t ? "var(--accent)" : "var(--border)"), background: fileType === t ? "var(--accent-dim)" : "transparent", color: fileType === t ? "var(--accent)" : "var(--text-muted)", fontWeight: fileType === t ? 600 : 400 }}>
-                {t === "all" ? "Tous" : t}
+          <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+            {[{ key: "all", label: "Tous", icon: "" }, ...TYPES].map(t => (
+              <button key={t.key} onClick={() => setFilterType(t.key)}
+                style={{ padding: "0.2rem 0.55rem", borderRadius: "5px", fontSize: "0.72rem", cursor: "pointer", border: "1px solid " + (filterType === t.key ? "var(--accent)" : "var(--border)"), background: filterType === t.key ? "var(--accent-dim)" : "transparent", color: filterType === t.key ? "var(--accent)" : "var(--text-muted)", fontWeight: filterType === t.key ? 600 : 400 }}>
+                {t.icon} {t.label || "Tous"}
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Upload form */}
-        <div style={{ padding: "0.875rem 1.5rem", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
-          <p style={{ margin: "0 0 0.625rem", fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ajouter un média partagé</p>
-          <form onSubmit={handleUpload} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-            <input className="genia-input" placeholder="Nom" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              style={{ width: "160px" }} />
-            <select className="genia-input" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              style={{ width: "110px" }}>
-              {FILE_TYPES.filter(t => t !== "all").map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 0.875rem", borderRadius: "8px", border: "1px dashed var(--border)", fontSize: "0.82rem", color: "var(--text-muted)", cursor: uploading ? "wait" : "pointer" }}>
-              {uploading ? "Upload..." : "📎 Fichier"}
-              <input ref={fileRef} type="file" style={{ display: "none" }} disabled={uploading} />
-            </label>
-            <button className="genia-btn" type="submit" disabled={uploading} style={{ padding: "0.4rem 1rem", fontSize: "0.82rem" }}>
-              {uploading ? "..." : "Ajouter"}
-            </button>
-          </form>
         </div>
 
         {/* Grid */}
@@ -179,29 +196,30 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
           ) : assets.length === 0 ? (
             <div style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "12px" }}>
               <p style={{ fontSize: "2rem", margin: "0 0 0.5rem" }}>🗂</p>
-              <p style={{ margin: 0 }}>Aucun média partagé pour l&apos;instant</p>
+              <p style={{ margin: 0, fontSize: "0.85rem" }}>Aucun média — ajoute un lien Drive ci-dessus</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.875rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: "0.875rem" }}>
               {assets.map(a => {
+                const thumb = driveThumbnail(a.url);
                 const client = clients.find(c => c.id === a.clientId);
                 const project = projects.find(p => p.id === a.projectId);
+                const isActive = selected?.id === a.id;
                 return (
                   <div key={a.id} onClick={() => setSelected(a)}
-                    style={{ background: "var(--surface)", border: "1px solid " + (selected?.id === a.id ? "var(--accent)" : "var(--border)"), borderRadius: "10px", overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}>
-                    <div style={{ height: "100px", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                      {a.fileType === "image"
-                        ? <img src={a.url} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                        : <span style={{ fontSize: "2.5rem" }}>{fileIcon(a.fileType)}</span>}
+                    style={{ background: "var(--surface)", border: "1px solid " + (isActive ? "var(--accent)" : "var(--border)"), borderRadius: "10px", overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}>
+                    <div style={{ height: "110px", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {thumb
+                        ? <img src={thumb} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        : <span style={{ fontSize: "2.5rem" }}>{typeIcon(a.fileType)}</span>}
                     </div>
-                    <div style={{ padding: "0.5rem 0.625rem" }}>
-                      <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
-                      {client && (
-                        <p style={{ margin: "0.15rem 0 0", fontSize: "0.6rem", color: "var(--accent)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {client.name}{project ? ` · ${project.title}` : ""}
-                        </p>
-                      )}
-                      {!client && <p style={{ margin: "0.15rem 0 0", fontSize: "0.62rem", color: "var(--text-muted)" }}>{formatSize(a.fileSize)}</p>}
+                    <div style={{ padding: "0.5rem 0.75rem" }}>
+                      <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
+                      {client
+                        ? <p style={{ margin: "0.15rem 0 0", fontSize: "0.62rem", color: "var(--accent)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {client.name}{project ? ` · ${project.title}` : ""}
+                          </p>
+                        : <p style={{ margin: "0.15rem 0 0", fontSize: "0.62rem", color: "var(--text-muted)" }}>{typeIcon(a.fileType)} {TYPES.find(t => t.key === a.fileType)?.label ?? a.fileType}</p>}
                     </div>
                   </div>
                 );
@@ -213,21 +231,26 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
 
       {/* Detail panel */}
       {selected && (
-        <div style={{ width: "290px", borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ width: "280px", borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 700 }}>Détails</p>
-            <button onClick={() => setSelected(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1.1rem", lineHeight: 1, padding: 0 }}>×</button>
+            <button onClick={() => setSelected(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1.2rem", lineHeight: 1, padding: 0 }}>×</button>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
             {/* Preview */}
-            <div style={{ height: "130px", background: "var(--bg)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem", overflow: "hidden" }}>
-              {selected.fileType === "image"
-                ? <img src={selected.url} alt={selected.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                : <span style={{ fontSize: "3.5rem" }}>{fileIcon(selected.fileType)}</span>}
-            </div>
+            {(() => { const thumb = driveThumbnail(selected.url); return thumb ? (
+              <div style={{ height: "130px", background: "var(--bg)", borderRadius: "8px", overflow: "hidden", marginBottom: "1rem" }}>
+                <img src={thumb} alt={selected.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = "none"; }} />
+              </div>
+            ) : (
+              <div style={{ height: "80px", background: "var(--bg)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem", fontSize: "2.5rem" }}>
+                {typeIcon(selected.fileType)}
+              </div>
+            ); })()}
+
             <p style={{ margin: "0 0 0.2rem", fontWeight: 700, fontSize: "0.9rem" }}>{selected.name}</p>
             <p style={{ margin: "0 0 1.25rem", fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              {selected.fileType} · {formatSize(selected.fileSize)} · {selected.user.name || selected.user.email}
+              {TYPES.find(t => t.key === selected.fileType)?.label} · ajouté par {selected.user.name || selected.user.email}
             </p>
 
             {/* Lier à */}
@@ -239,28 +262,26 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             {selected.clientId && (
-              <select className="genia-input" style={{ width: "100%", marginBottom: "1rem", fontSize: "0.82rem" }}
+              <select className="genia-input" style={{ width: "100%", marginBottom: "0.75rem", fontSize: "0.82rem" }}
                 value={selected.projectId || ""}
-                onChange={e => linkAsset(selected.clientId, e.target.value)}
-                disabled={linking}>
+                onChange={e => linkAsset(selected.clientId, e.target.value)}>
                 <option value="">— Aucun projet —</option>
-                {allClientProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                {clientProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             )}
             {selected.clientId && (
-              <p style={{ margin: "0 0 1.25rem", fontSize: "0.72rem", color: "var(--accent)" }}>
-                ✓ Lié à {clients.find(c => c.id === selected.clientId)?.name}
+              <p style={{ margin: "0 0 1rem", fontSize: "0.72rem", color: "var(--accent)" }}>
+                ✓ {clients.find(c => c.id === selected.clientId)?.name}
                 {selected.projectId && ` · ${projects.find(p => p.id === selected.projectId)?.title}`}
               </p>
             )}
 
-            <button onClick={() => copyUrl(selected.url)} className="genia-btn"
-              style={{ width: "100%", fontSize: "0.8rem", marginBottom: "0.5rem" }}>
-              {copied ? "✓ Copié !" : "Copier le lien"}
+            <button onClick={() => copyLink(selected.url)} className="genia-btn" style={{ width: "100%", fontSize: "0.8rem", marginBottom: "0.5rem" }}>
+              {copied ? "✓ Lien copié !" : "Copier le lien"}
             </button>
-            <a href={selected.url} target="_blank" rel="noopener noreferrer"
+            <a href={driveViewUrl(selected.url)} target="_blank" rel="noopener noreferrer"
               style={{ display: "block", textAlign: "center", padding: "0.4rem", fontSize: "0.8rem", color: "var(--accent)", textDecoration: "none" }}>
-              Ouvrir ↗
+              Ouvrir dans Drive ↗
             </a>
             {selected.user.email === currentUser.email && (
               <button onClick={() => deleteAsset(selected.id)}
