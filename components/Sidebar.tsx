@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
   { label: "Dashboard",    href: "/dashboard",          icon: "⊞", adminOnly: true },
-  { label: "Assets",       href: "/dashboard/assets",   icon: "◈" },
+  { label: "Assets",        href: "/dashboard/assets",        icon: "◈" },
+  { label: "Médiathèque",  href: "/dashboard/mediatheque",   icon: "🗂" },
   { label: "CRM",          href: "/dashboard/crm",      icon: "◉" },
   { label: "SOP",          href: "/dashboard/sop",      icon: "◎" },
   { label: "Taches",       href: "/dashboard/todos",    icon: "✓" },

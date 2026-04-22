@@ -13,10 +13,11 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get("category") || "";
   const clientId = searchParams.get("clientId") || "";
   const projectId = searchParams.get("projectId") || "";
+  const shared = searchParams.get("shared") === "true";
 
   const assets = await prisma.asset.findMany({
     where: {
-      uploadedBy: user.id,
+      ...(shared ? { isPublic: true, clientId: "", projectId: "" } : { uploadedBy: user.id }),
       AND: [
         search ? { OR: [{ name: { contains: search } }, { tags: { contains: search } }, { description: { contains: search } }] } : {},
         category ? { category } : {},

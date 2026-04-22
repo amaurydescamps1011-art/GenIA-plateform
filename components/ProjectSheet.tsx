@@ -23,6 +23,14 @@ const STATUS_OPTIONS = [
   { key: "termine", label: "Terminé", color: "#22c55e" },
 ];
 
+const ASSIGNEES = [
+  { name: "Amaury", initial: "A", color: "#6366f1" },
+  { name: "Fabien", initial: "F", color: "#f59e0b" },
+];
+function assigneeInfo(name: string) {
+  return ASSIGNEES.find(a => a.name === name) ?? null;
+}
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -623,7 +631,12 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
                 <div key={p.id} onClick={() => loadProject(p)}
                   style={{ padding: "0.625rem 0.75rem", borderRadius: "7px", cursor: "pointer", marginBottom: "0.25rem", background: isActive ? "var(--accent-dim)" : "transparent", border: "1px solid " + (isActive ? "var(--accent)" : "transparent") }}
                 >
-                  <p style={{ margin: 0, fontWeight: isActive ? 600 : 400, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <p style={{ margin: 0, fontWeight: isActive ? 600 : 400, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{p.title}</p>
+                    {(() => { const a = assigneeInfo(p.assignedTo); return a ? (
+                      <span title={a.name} style={{ width: "20px", height: "20px", borderRadius: "50%", background: a.color, color: "#fff", fontSize: "0.6rem", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{a.initial}</span>
+                    ) : null; })()}
+                  </div>
                   <span style={{ fontSize: "0.68rem", color: s.color, fontWeight: 600 }}>{s.label}</span>
                 </div>
               );
@@ -658,13 +671,20 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
                 <input type="date" className="genia-input"
                   style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
                   value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProject({ dueDate: e.target.value }); }} />
-                <select className="genia-input"
-                  style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
-                  value={assignedTo} onChange={(e) => { setAssignedTo(e.target.value); saveProject({ assignedTo: e.target.value }); }}>
-                  <option value="">— Responsable —</option>
-                  <option value="Amaury">Amaury</option>
-                  <option value="Fabien">Fabien</option>
-                </select>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.2rem 0.5rem", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--surface)" }}>
+                  <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginRight: "0.15rem" }}>Resp.</span>
+                  {ASSIGNEES.map(a => {
+                    const active = assignedTo === a.name;
+                    return (
+                      <button key={a.name} title={a.name}
+                        onClick={() => { const v = active ? "" : a.name; setAssignedTo(v); saveProject({ assignedTo: v }); }}
+                        style={{ width: "26px", height: "26px", borderRadius: "50%", border: "2px solid " + (active ? a.color : "var(--border)"), background: active ? a.color : "transparent", color: active ? "#fff" : "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                        {a.initial}
+                      </button>
+                    );
+                  })}
+                  {assignedTo && <span style={{ fontSize: "0.75rem", fontWeight: 600, color: assigneeInfo(assignedTo)?.color, marginLeft: "0.2rem" }}>{assignedTo}</span>}
+                </div>
                 {(activeStep || showMedia) && (
                   <button onClick={() => { setActiveStep(null); setShowMedia(false); }}
                     style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", background: "transparent", cursor: "pointer", color: "var(--text-muted)" }}>
