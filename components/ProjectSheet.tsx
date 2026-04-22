@@ -31,6 +31,19 @@ function assigneeInfo(name: string) {
   return ASSIGNEES.find(a => a.name === name) ?? null;
 }
 
+function driveId(url: string): string | null {
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) ?? url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function driveThumbnail(url: string): string {
+  const id = driveId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w600` : url;
+}
+function driveOpen(url: string): string {
+  const id = driveId(url);
+  return id ? `https://drive.google.com/file/d/${id}/view` : url;
+}
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -73,8 +86,6 @@ function StoryboardEditor({
     const p = parseFrames(step.content);
     return p.length > 0 ? p : [{ id: uid(), imageUrl: "", note: "" }, { id: uid(), imageUrl: "", note: "" }];
   });
-  const [uploading, setUploading] = useState<string | null>(null);
-
   function save(next: Frame[]) {
     setFrames(next);
     onUpdate({ ...step, content: JSON.stringify(next) });
@@ -83,18 +94,7 @@ function StoryboardEditor({
   function addFrame() { save([...frames, { id: uid(), imageUrl: "", note: "" }]); }
   function removeFrame(id: string) { save(frames.filter(f => f.id !== id)); }
   function updateNote(id: string, note: string) { save(frames.map(f => f.id === id ? { ...f, note } : f)); }
-
-  async function uploadFrame(id: string, file: File) {
-    setUploading(id);
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/projects/" + projectId + "/upload", { method: "POST", body: fd });
-    if (res.ok) {
-      const data = await res.json();
-      save(frames.map(f => f.id === id ? { ...f, imageUrl: data.url as string } : f));
-    }
-    setUploading(null);
-  }
+  function setFrameUrl(id: string, url: string) { save(frames.map(f => f.id === id ? { ...f, imageUrl: url } : f)); }
 
   const frameBox: React.CSSProperties = {
     position: "relative",
@@ -125,50 +125,37 @@ function StoryboardEditor({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "1.25rem" }}>
         {frames.map((frame, idx) => (
           <div key={frame.id}>
-            {/* Image zone */}
-            <label style={{ cursor: uploading === frame.id ? "wait" : "pointer", display: "block" }}>
-              <div style={frameBox}>
-                <div style={inset}>
-                  {frame.imageUrl ? (
-                    <img src={frame.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : (
-                    <div style={{ ...inset, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: "0.25rem" }}>
-                      <span style={{ fontSize: "1.75rem" }}>📷</span>
-                      <span style={{ fontSize: "0.72rem" }}>{uploading === frame.id ? "Upload..." : "Cliquer pour ajouter"}</span>
-                    </div>
-                  )}
-                  {/* Frame number */}
-                  <div style={{ position: "absolute", top: "6px", left: "8px", background: "rgba(0,0,0,0.65)", color: "white", borderRadius: "4px", padding: "1px 7px", fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.03em" }}>
-                    {idx + 1}
+            <div style={frameBox}>
+              <div style={inset}>
+                {frame.imageUrl ? (
+                  <img src={driveThumbnail(frame.imageUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.opacity = "0.4"; }} />
+                ) : (
+                  <div style={{ ...inset, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0.75rem", gap: "0.4rem" }}>
+                    <span style={{ fontSize: "1.25rem", color: "var(--text-muted)" }}>🔗</span>
+                    <input
+                      onClick={e => e.stopPropagation()}
+                      placeholder="Coller lien Drive..."
+                      value={frame.imageUrl}
+                      onChange={e => setFrameUrl(frame.id, e.target.value)}
+                      style={{ width: "100%", fontSize: "0.62rem", background: "transparent", border: "1px solid var(--border)", borderRadius: "4px", padding: "0.25rem 0.4rem", color: "var(--text)", boxSizing: "border-box", textAlign: "center" }}
+                    />
                   </div>
-                  {/* Delete */}
-                  <button
-                    onClick={e => { e.preventDefault(); removeFrame(frame.id); }}
-                    style={{ position: "absolute", top: "6px", right: "8px", background: "rgba(0,0,0,0.65)", border: "none", borderRadius: "50%", width: "22px", height: "22px", cursor: "pointer", color: "white", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
-                  >×</button>
-                  {/* Replace image hint on hover */}
-                  {frame.imageUrl && (
-                    <div
-                      style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.3rem", transition: "opacity 0.15s", opacity: 0 }}
-                      onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = "1"}
-                      onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = "0"}
-                    >
-                      <span style={{ fontSize: "0.7rem", color: "white" }}>Changer l&apos;image</span>
-                    </div>
-                  )}
-                </div>
+                )}
+                <div style={{ position: "absolute", top: "6px", left: "8px", background: "rgba(0,0,0,0.65)", color: "white", borderRadius: "4px", padding: "1px 7px", fontSize: "0.7rem", fontWeight: 700 }}>{idx + 1}</div>
+                <button onClick={e => { e.stopPropagation(); removeFrame(frame.id); }}
+                  style={{ position: "absolute", top: "6px", right: "8px", background: "rgba(0,0,0,0.65)", border: "none", borderRadius: "50%", width: "22px", height: "22px", cursor: "pointer", color: "white", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>×</button>
+                {frame.imageUrl && (
+                  <button onClick={e => { e.stopPropagation(); setFrameUrl(frame.id, ""); }}
+                    style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.55)", border: "none", color: "white", fontSize: "0.68rem", cursor: "pointer", padding: "0.3rem", opacity: 0, transition: "opacity 0.15s" }}
+                    onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0"}>
+                    Changer l&apos;image
+                  </button>
+                )}
               </div>
-              <input type="file" accept="image/*" style={{ display: "none" }} disabled={!!uploading}
-                onChange={e => { const f = e.target.files?.[0]; if (f) uploadFrame(frame.id, f); e.target.value = ""; }} />
-            </label>
-            {/* Caption */}
-            <input
-              className="genia-input"
-              style={{ marginTop: "0.5rem", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
-              placeholder={"Plan " + (idx + 1) + " — description..."}
-              value={frame.note}
-              onChange={e => updateNote(frame.id, e.target.value)}
-            />
+            </div>
+            <input className="genia-input" style={{ marginTop: "0.5rem", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+              placeholder={"Plan " + (idx + 1) + " — description..."} value={frame.note} onChange={e => updateNote(frame.id, e.target.value)} />
           </div>
         ))}
 
@@ -199,7 +186,7 @@ function StepDetailInner({
   const [images, setImages] = useState<string[]>(step.images || []);
   const [newUrl, setNewUrl] = useState("");
   const [newLabel, setNewLabel] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [newImageUrl, setNewImageUrl] = useState("");
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -234,18 +221,12 @@ function StepDetailInner({
     triggerSave({ driveLinks: next });
   }
 
-  async function uploadImage(file: File) {
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/projects/" + projectId + "/upload", { method: "POST", body: fd });
-    if (res.ok) {
-      const data = await res.json();
-      const next = [...images, data.url as string];
-      setImages(next);
-      triggerSave({ images: next });
-    }
-    setUploading(false);
+  function addImageFromDrive() {
+    if (!newImageUrl.trim()) return;
+    const next = [...images, newImageUrl.trim()];
+    setImages(next);
+    setNewImageUrl("");
+    triggerSave({ images: next });
   }
 
   function removeImage(url: string) {
@@ -304,7 +285,9 @@ function StepDetailInner({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "0.625rem", marginBottom: "1rem" }}>
             {images.map((url) => (
               <div key={url} style={{ position: "relative", borderRadius: "6px", overflow: "hidden" }}>
-                <img src={url} alt="" style={{ width: "100%", height: "90px", objectFit: "cover", display: "block" }} />
+                <a href={driveOpen(url)} target="_blank" rel="noopener noreferrer">
+                  <img src={driveThumbnail(url)} alt="" style={{ width: "100%", height: "90px", objectFit: "cover", display: "block" }} onError={e => { (e.target as HTMLImageElement).style.opacity = "0.4"; }} />
+                </a>
                 <button
                   onClick={() => removeImage(url)}
                   style={{ position: "absolute", top: "4px", right: "4px", background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", color: "white", fontSize: "0.75rem", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
@@ -313,11 +296,16 @@ function StepDetailInner({
             ))}
           </div>
         )}
-        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: uploading ? "wait" : "pointer", padding: "0.5rem 1rem", borderRadius: "7px", border: "1px dashed var(--border)", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-          {uploading ? "Upload en cours..." : "+ Ajouter une image"}
-          <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploading}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }} />
-        </label>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <input className="genia-input" style={{ flex: 1, fontSize: "0.82rem" }}
+            placeholder="Lien Drive (image, PDF...)"
+            value={newImageUrl}
+            onChange={e => setNewImageUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addImageFromDrive(); }} />
+          <button className="genia-btn" style={{ fontSize: "0.82rem", padding: "0.4rem 0.875rem", whiteSpace: "nowrap" }} onClick={addImageFromDrive}>
+            + Ajouter
+          </button>
+        </div>
       </div>
 
       {/* Liens Drive */}
@@ -425,28 +413,46 @@ const MEDIA_CATS = [
   { key: "autre", label: "Autre", icon: "📄" },
 ];
 
-type MediaAsset = { id: string; name: string; category: string; url: string; fileType: string };
+type MediaAsset = { id: string; name: string; category: string; url: string; fileType: string; projectId?: string };
 
 function ProjectMedia({ projectId, clientId, onClose }: { projectId: string; clientId: string; onClose: () => void }) {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [shared, setShared] = useState<MediaAsset[]>([]);
+  const [tab, setTab] = useState<"drive" | "mediatheque">("drive");
   const [cat, setCat] = useState("logo");
-  const [uploading, setUploading] = useState(false);
+  const [form, setForm] = useState({ name: "", url: "" });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/assets?projectId=" + projectId).then(r => r.ok ? r.json() : []).then(setAssets);
+    fetch("/api/assets?shared=true").then(r => r.ok ? r.json() : []).then(setShared);
   }, [projectId]);
 
-  async function upload(file: File) {
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("name", file.name.replace(/\.[^.]+$/, ""));
-    fd.append("category", cat);
-    fd.append("projectId", projectId);
-    fd.append("clientId", clientId);
-    const res = await fetch("/api/assets", { method: "POST", body: fd });
-    if (res.ok) { const a = await res.json(); setAssets(prev => [a, ...prev]); }
-    setUploading(false);
+  async function addDriveAsset(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.url.trim()) return;
+    setSaving(true);
+    const res = await fetch("/api/assets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.name.trim(), url: form.url.trim(), category: cat, projectId, clientId }),
+    });
+    if (res.ok) {
+      const a = await res.json();
+      setAssets(prev => [a, ...prev]);
+      setShared(prev => [a, ...prev]);
+      setForm({ name: "", url: "" });
+    }
+    setSaving(false);
+  }
+
+  async function addFromMediatheque(a: MediaAsset) {
+    const res = await fetch("/api/assets/" + a.id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, clientId }),
+    });
+    if (res.ok) setAssets(prev => [{ ...a, projectId }, ...prev]);
   }
 
   async function del(id: string) {
@@ -454,52 +460,101 @@ function ProjectMedia({ projectId, clientId, onClose }: { projectId: string; cli
     setAssets(prev => prev.filter(a => a.id !== id));
   }
 
+  const alreadyLinked = new Set(assets.map(a => a.id));
+
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "1.75rem 2rem" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem 2rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
         <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "var(--text-muted)", padding: 0 }}>← Étapes</button>
-        <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>📁 Médias du projet</h2>
+        <h2 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>📁 Médias du projet</h2>
       </div>
 
-      {/* Upload */}
+      {/* Add panel */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.25rem", marginBottom: "1.5rem" }}>
-        <p style={{ margin: "0 0 0.75rem", fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ajouter un média</p>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-          {MEDIA_CATS.map(c => (
-            <button key={c.key} onClick={() => setCat(c.key)}
-              style={{ padding: "0.3rem 0.75rem", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", border: "1px solid " + (cat === c.key ? "var(--accent)" : "var(--border)"), background: cat === c.key ? "var(--accent-dim)" : "transparent", color: cat === c.key ? "var(--accent)" : "var(--text-muted)", fontWeight: cat === c.key ? 600 : 400 }}>
-              {c.icon} {c.label}
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+          {([["drive", "🔗 Lien Drive"], ["mediatheque", "🗂 Depuis la Médiathèque"]] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              style={{ padding: "0.35rem 0.875rem", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", border: "1px solid " + (tab === key ? "var(--accent)" : "var(--border)"), background: tab === key ? "var(--accent-dim)" : "transparent", color: tab === key ? "var(--accent)" : "var(--text-muted)", fontWeight: tab === key ? 600 : 400 }}>
+              {label}
             </button>
           ))}
         </div>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: uploading ? "wait" : "pointer", padding: "0.5rem 1.25rem", borderRadius: "8px", border: "1px dashed var(--border)", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-          {uploading ? "Upload..." : "+ Choisir un fichier"}
-          <input type="file" accept="image/*,application/pdf,video/*" style={{ display: "none" }} disabled={uploading}
-            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
-        </label>
+
+        {tab === "drive" && (
+          <>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+              {MEDIA_CATS.map(c => (
+                <button key={c.key} onClick={() => setCat(c.key)}
+                  style={{ padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer", border: "1px solid " + (cat === c.key ? "var(--accent)" : "var(--border)"), background: cat === c.key ? "var(--accent-dim)" : "transparent", color: cat === c.key ? "var(--accent)" : "var(--text-muted)", fontWeight: cat === c.key ? 600 : 400 }}>
+                  {c.icon} {c.label}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={addDriveAsset} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <input className="genia-input" placeholder="Nom du fichier" value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ width: "160px" }} />
+              <input className="genia-input" placeholder="https://drive.google.com/file/d/..." value={form.url}
+                onChange={e => setForm(f => ({ ...f, url: e.target.value }))} style={{ flex: 1, minWidth: "200px" }} />
+              <button className="genia-btn" type="submit" disabled={saving} style={{ whiteSpace: "nowrap" }}>
+                {saving ? "..." : "+ Ajouter"}
+              </button>
+            </form>
+            <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: "var(--text-muted)" }}>
+              Drive → clic droit → Partager → "Toute personne ayant le lien" → Copier le lien
+            </p>
+          </>
+        )}
+
+        {tab === "mediatheque" && (
+          shared.filter(a => !alreadyLinked.has(a.id)).length === 0 ? (
+            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>Aucun média disponible dans la Médiathèque.</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: "0.625rem" }}>
+              {shared.filter(a => !alreadyLinked.has(a.id)).map(a => {
+                const thumb = driveId(a.url) ? driveThumbnail(a.url) : null;
+                const catInfo = MEDIA_CATS.find(c => c.key === a.category);
+                return (
+                  <div key={a.id} onClick={() => addFromMediatheque(a)}
+                    style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}
+                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)"}
+                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)"}>
+                    <div style={{ height: "70px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {thumb
+                        ? <img src={thumb} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        : <span style={{ fontSize: "1.75rem" }}>{catInfo?.icon || "📄"}</span>}
+                    </div>
+                    <p style={{ margin: 0, padding: "0.3rem 0.5rem", fontSize: "0.65rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
       </div>
 
-      {/* Grid */}
+      {/* Project assets grid */}
       {assets.length === 0 ? (
-        <div style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>Aucun média pour ce projet.</div>
+        <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "0.85rem" }}>Aucun média pour ce projet.</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "0.875rem" }}>
           {assets.map(a => {
             const catInfo = MEDIA_CATS.find(c => c.key === a.category);
+            const thumb = driveId(a.url) ? driveThumbnail(a.url) : null;
             return (
               <div key={a.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
-                <div style={{ height: "100px", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                  {a.fileType === "image"
-                    ? <img src={a.url} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                    : <span style={{ fontSize: "2.5rem" }}>{catInfo?.icon || "📄"}</span>}
-                </div>
+                <a href={driveOpen(a.url)} target="_blank" rel="noopener noreferrer" style={{ display: "block", height: "100px", background: "var(--bg)", overflow: "hidden" }}>
+                  {thumb
+                    ? <img src={thumb} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    : <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem" }}>{catInfo?.icon || "📄"}</div>}
+                </a>
                 <div style={{ padding: "0.5rem 0.625rem" }}>
                   <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.2rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.2rem", alignItems: "center" }}>
                     <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{catInfo?.label || a.category}</span>
-                    <div style={{ display: "flex", gap: "0.25rem" }}>
-                      <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.65rem", color: "var(--accent)", textDecoration: "none" }}>↗</a>
-                      <button onClick={() => del(a.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#ef4444", fontSize: "0.7rem", padding: 0, lineHeight: 1 }}>×</button>
+                    <div style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
+                      <a href={driveOpen(a.url)} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.65rem", color: "var(--accent)", textDecoration: "none" }}>Drive ↗</a>
+                      <button onClick={() => del(a.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#ef4444", fontSize: "0.75rem", padding: 0, lineHeight: 1 }}>×</button>
                     </div>
                   </div>
                 </div>
