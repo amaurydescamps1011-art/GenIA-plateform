@@ -13,10 +13,14 @@ type Asset = {
   mimeType: string;
   category: string;
   url: string;
+  clientId: string;
+  projectId: string;
   createdAt: string;
   user: { name: string | null; email: string };
 };
 
+type Client = { id: string; name: string };
+type Project = { id: string; title: string; clientId: string };
 type User = { id: string; name?: string | null; email: string; role: string };
 
 function formatSize(bytes: number) {
@@ -32,12 +36,16 @@ function fileIcon(type: string) {
 
 export default function MediathequeClient({ currentUser }: { currentUser: User }) {
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState("");
   const [fileType, setFileType] = useState("all");
+  const [filterClient, setFilterClient] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [copied, setCopied] = useState(false);
+  const [linking, setLinking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: "", description: "", category: "image" });
 
@@ -46,16 +54,22 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
     const params = new URLSearchParams({ shared: "true" });
     if (search) params.set("q", search);
     if (fileType !== "all") params.set("category", fileType);
+    if (filterClient) params.set("clientId", filterClient);
     const res = await fetch(`/api/assets?${params}`);
     const data = await res.json();
     setAssets(Array.isArray(data) ? data : []);
     setLoading(false);
-  }, [search, fileType]);
+  }, [search, fileType, filterClient]);
 
   useEffect(() => {
     const t = setTimeout(fetchAssets, 300);
     return () => clearTimeout(t);
   }, [fetchAssets]);
+
+  useEffect(() => {
+    fetch("/api/crm").then(r => r.ok ? r.json() : []).then((data: Client[]) => setClients(Array.isArray(data) ? data : []));
+    fetch("/api/projects").then(r => r.ok ? r.json() : []).then((data: Project[]) => setProjects(Array.isArray(data) ? data : []));
+  }, []);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -85,11 +99,35 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
     if (selected?.id === id) setSelected(null);
   }
 
+  async function linkAsset(clientId: string, projectId: string) {
+    if (!selected) return;
+    setLinking(true);
+    const res = await fetch("/api/assets/" + selected.id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, projectId }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setSelected(updated);
+      setAssets(prev => prev.map(a => a.id === updated.id ? updated : a));
+    }
+    setLinking(false);
+  }
+
   function copyUrl(url: string) {
     navigator.clipboard.writeText(window.location.origin + url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
+
+  const selectedClientProjects = selected
+    ? projects.filter(p => p.clientId === (selected.clientId || ""))
+    : [];
+
+  const allClientProjects = selected?.clientId
+    ? projects.filter(p => p.clientId === selected.clientId)
+    : [];
 
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
@@ -98,7 +136,12 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
         {/* Toolbar */}
         <div style={{ padding: "1rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", flexShrink: 0 }}>
           <input className="genia-input" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
-            style={{ flex: 1, minWidth: "160px", maxWidth: "260px" }} />
+            style={{ flex: 1, minWidth: "140px", maxWidth: "220px" }} />
+          <select className="genia-input" value={filterClient} onChange={e => setFilterClient(e.target.value)}
+            style={{ width: "160px" }}>
+            <option value="">Tous les clients</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
           <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
             {FILE_TYPES.map(t => (
               <button key={t} onClick={() => setFileType(t)}
@@ -110,17 +153,17 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
         </div>
 
         {/* Upload form */}
-        <div style={{ padding: "1rem 1.5rem", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
-          <p style={{ margin: "0 0 0.75rem", fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ajouter un média partagé</p>
-          <form onSubmit={handleUpload} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <input className="genia-input" placeholder="Nom du fichier" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              style={{ width: "180px" }} />
+        <div style={{ padding: "0.875rem 1.5rem", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
+          <p style={{ margin: "0 0 0.625rem", fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ajouter un média partagé</p>
+          <form onSubmit={handleUpload} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <input className="genia-input" placeholder="Nom" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              style={{ width: "160px" }} />
             <select className="genia-input" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              style={{ width: "120px" }}>
+              style={{ width: "110px" }}>
               {FILE_TYPES.filter(t => t !== "all").map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 0.875rem", borderRadius: "8px", border: "1px dashed var(--border)", fontSize: "0.82rem", color: "var(--text-muted)", cursor: uploading ? "wait" : "pointer" }}>
-              {uploading ? "Upload..." : "📎 Choisir un fichier"}
+              {uploading ? "Upload..." : "📎 Fichier"}
               <input ref={fileRef} type="file" style={{ display: "none" }} disabled={uploading} />
             </label>
             <button className="genia-btn" type="submit" disabled={uploading} style={{ padding: "0.4rem 1rem", fontSize: "0.82rem" }}>
@@ -140,20 +183,29 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.875rem" }}>
-              {assets.map(a => (
-                <div key={a.id} onClick={() => setSelected(a)}
-                  style={{ background: "var(--surface)", border: "1px solid " + (selected?.id === a.id ? "var(--accent)" : "var(--border)"), borderRadius: "10px", overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}>
-                  <div style={{ height: "100px", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                    {a.fileType === "image"
-                      ? <img src={a.url} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                      : <span style={{ fontSize: "2.5rem" }}>{fileIcon(a.fileType)}</span>}
+              {assets.map(a => {
+                const client = clients.find(c => c.id === a.clientId);
+                const project = projects.find(p => p.id === a.projectId);
+                return (
+                  <div key={a.id} onClick={() => setSelected(a)}
+                    style={{ background: "var(--surface)", border: "1px solid " + (selected?.id === a.id ? "var(--accent)" : "var(--border)"), borderRadius: "10px", overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}>
+                    <div style={{ height: "100px", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {a.fileType === "image"
+                        ? <img src={a.url} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                        : <span style={{ fontSize: "2.5rem" }}>{fileIcon(a.fileType)}</span>}
+                    </div>
+                    <div style={{ padding: "0.5rem 0.625rem" }}>
+                      <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
+                      {client && (
+                        <p style={{ margin: "0.15rem 0 0", fontSize: "0.6rem", color: "var(--accent)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {client.name}{project ? ` · ${project.title}` : ""}
+                        </p>
+                      )}
+                      {!client && <p style={{ margin: "0.15rem 0 0", fontSize: "0.62rem", color: "var(--text-muted)" }}>{formatSize(a.fileSize)}</p>}
+                    </div>
                   </div>
-                  <div style={{ padding: "0.5rem 0.625rem" }}>
-                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</p>
-                    <p style={{ margin: "0.15rem 0 0", fontSize: "0.62rem", color: "var(--text-muted)" }}>{formatSize(a.fileSize)} · {a.user.name || a.user.email}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -161,22 +213,47 @@ export default function MediathequeClient({ currentUser }: { currentUser: User }
 
       {/* Detail panel */}
       {selected && (
-        <div style={{ width: "280px", borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ width: "290px", borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 700 }}>Détails</p>
             <button onClick={() => setSelected(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1.1rem", lineHeight: 1, padding: 0 }}>×</button>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
-            <div style={{ height: "140px", background: "var(--bg)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem", overflow: "hidden" }}>
+            {/* Preview */}
+            <div style={{ height: "130px", background: "var(--bg)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem", overflow: "hidden" }}>
               {selected.fileType === "image"
                 ? <img src={selected.url} alt={selected.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                 : <span style={{ fontSize: "3.5rem" }}>{fileIcon(selected.fileType)}</span>}
             </div>
-            <p style={{ margin: "0 0 0.25rem", fontWeight: 700, fontSize: "0.9rem" }}>{selected.name}</p>
-            <p style={{ margin: "0 0 1rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-              {selected.fileType} · {formatSize(selected.fileSize)}<br />
-              Ajouté par {selected.user.name || selected.user.email}
+            <p style={{ margin: "0 0 0.2rem", fontWeight: 700, fontSize: "0.9rem" }}>{selected.name}</p>
+            <p style={{ margin: "0 0 1.25rem", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+              {selected.fileType} · {formatSize(selected.fileSize)} · {selected.user.name || selected.user.email}
             </p>
+
+            {/* Lier à */}
+            <p style={{ margin: "0 0 0.5rem", fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Lier à</p>
+            <select className="genia-input" style={{ width: "100%", marginBottom: "0.5rem", fontSize: "0.82rem" }}
+              value={selected.clientId || ""}
+              onChange={e => linkAsset(e.target.value, "")}>
+              <option value="">— Aucun client —</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {selected.clientId && (
+              <select className="genia-input" style={{ width: "100%", marginBottom: "1rem", fontSize: "0.82rem" }}
+                value={selected.projectId || ""}
+                onChange={e => linkAsset(selected.clientId, e.target.value)}
+                disabled={linking}>
+                <option value="">— Aucun projet —</option>
+                {allClientProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            )}
+            {selected.clientId && (
+              <p style={{ margin: "0 0 1.25rem", fontSize: "0.72rem", color: "var(--accent)" }}>
+                ✓ Lié à {clients.find(c => c.id === selected.clientId)?.name}
+                {selected.projectId && ` · ${projects.find(p => p.id === selected.projectId)?.title}`}
+              </p>
+            )}
+
             <button onClick={() => copyUrl(selected.url)} className="genia-btn"
               style={{ width: "100%", fontSize: "0.8rem", marginBottom: "0.5rem" }}>
               {copied ? "✓ Copié !" : "Copier le lien"}

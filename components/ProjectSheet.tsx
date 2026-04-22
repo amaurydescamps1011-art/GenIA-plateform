@@ -382,9 +382,9 @@ function StepGrid({ steps, onSelect, onAddStep }: { steps: Step[]; onSelect: (s:
           const filled = hasContent || imgCount > 0 || linkCount > 0;
           return (
             <div key={step.id} onClick={() => onSelect(step)}
-              style={{ background: "var(--surface)", border: "1px solid " + (filled ? "var(--accent)" : "var(--border)"), borderRadius: "12px", padding: "1.25rem", cursor: "pointer", display: "flex", flexDirection: "column", gap: "0.625rem", minHeight: "140px", transition: "box-shadow 0.15s, transform 0.1s" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.15)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
+              style={{ background: "var(--surface)", border: "2px solid " + (filled ? "rgba(255,255,255,0.55)" : "var(--border)"), borderRadius: "12px", padding: "1.25rem", cursor: "pointer", display: "flex", flexDirection: "column", gap: "0.625rem", minHeight: "140px", transition: "box-shadow 0.15s, transform 0.1s", boxShadow: filled ? "0 0 0 1px rgba(255,255,255,0.12), 0 0 18px rgba(255,255,255,0.07)" : "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = filled ? "0 0 0 1px rgba(255,255,255,0.2), 0 6px 24px rgba(0,0,0,0.2)" : "0 4px 20px rgba(0,0,0,0.15)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = filled ? "0 0 0 1px rgba(255,255,255,0.12), 0 0 18px rgba(255,255,255,0.07)" : "none"; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
             >
               <span style={{ fontSize: "1.75rem" }}>{step.icon}</span>
               <p style={{ margin: 0, fontWeight: 600, fontSize: "0.875rem", color: "var(--text)" }}>{step.label}</p>

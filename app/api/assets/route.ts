@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const assets = await prisma.asset.findMany({
     where: {
-      ...(shared ? { isPublic: true, clientId: "", projectId: "" } : { uploadedBy: user.id }),
+      ...(shared ? { isPublic: true } : { uploadedBy: user.id }),
       AND: [
         search ? { OR: [{ name: { contains: search } }, { tags: { contains: search } }, { description: { contains: search } }] } : {},
         category ? { category } : {},
