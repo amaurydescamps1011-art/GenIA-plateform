@@ -17,6 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(body.notes !== undefined && { notes: body.notes }),
       ...(body.checklist !== undefined && { checklist: body.checklist }),
       ...(body.dueDate !== undefined && { dueDate: body.dueDate }),
+      ...(body.assignedTo !== undefined && { assignedTo: body.assignedTo }),
     },
   });
   return NextResponse.json(project);

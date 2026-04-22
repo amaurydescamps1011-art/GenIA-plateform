@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
       notes: body.notes || "",
       checklist: body.checklist || DEFAULT_CHECKLIST,
       dueDate: body.dueDate || "",
+      assignedTo: body.assignedTo || "",
       createdBy: user.id,
     },
   });

@@ -169,19 +169,20 @@ model SocialPost {
 }
 
 model Project {
-  id         String   @id @default(cuid())
-  clientId   String   @default("")
-  clientName String   @default("")
-  title      String
-  status     String   @default("en_cours")
-  script     String   @default("")
-  notes      String   @default("")
-  checklist  String   @default("[]")
-  dueDate    String   @default("")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  createdBy  String
-  user       User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  clientId     String   @default("")
+  clientName   String   @default("")
+  title        String
+  status       String   @default("en_cours")
+  script       String   @default("")
+  notes        String   @default("")
+  checklist    String   @default("[]")
+  dueDate      String   @default("")
+  assignedTo   String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String
+  user         User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
 
 model Portfolio {

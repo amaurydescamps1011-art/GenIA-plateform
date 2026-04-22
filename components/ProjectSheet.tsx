@@ -13,6 +13,7 @@ type Project = {
   status: string;
   checklist: string;
   dueDate: string;
+  assignedTo: string;
   createdAt: string;
 };
 
@@ -517,6 +518,7 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
   const [status, setStatus] = useState("en_cours");
   const [dueDate, setDueDate] = useState("");
   const [showMedia, setShowMedia] = useState(false);
+  const [assignedTo, setAssignedTo] = useState("");
   const titleTimer = useRef<NodeJS.Timeout | null>(null);
 
   const fetchProjects = useCallback(async () => {
@@ -536,6 +538,7 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
     setTitle(p.title);
     setStatus(p.status);
     setDueDate(p.dueDate || "");
+    setAssignedTo(p.assignedTo || "");
     setSteps(parseSteps(p.checklist));
     setActiveStep(null);
   }
@@ -655,6 +658,13 @@ export default function ProjectSheet({ clientId, clientName, onClose }: { client
                 <input type="date" className="genia-input"
                   style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
                   value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProject({ dueDate: e.target.value }); }} />
+                <select className="genia-input"
+                  style={{ background: "var(--surface)", color: "var(--text)", fontSize: "0.8rem", padding: "0.3rem 0.6rem", width: "auto" }}
+                  value={assignedTo} onChange={(e) => { setAssignedTo(e.target.value); saveProject({ assignedTo: e.target.value }); }}>
+                  <option value="">— Responsable —</option>
+                  <option value="Amaury">Amaury</option>
+                  <option value="Fabien">Fabien</option>
+                </select>
                 {(activeStep || showMedia) && (
                   <button onClick={() => { setActiveStep(null); setShowMedia(false); }}
                     style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", background: "transparent", cursor: "pointer", color: "var(--text-muted)" }}>
